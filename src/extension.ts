@@ -488,7 +488,7 @@ function generateDashboardHtml(logs: any[]): string {
             </div>
             
             <h3>Most Common Errors (Top 20)</h3>
-            <ul>${errorList || "<li>No errors logged yet.</li>"}</ul>
+            <ul>${errorList || "No errors logged yet."}</ul>
             
             <div class="button-group">
                 <button id="exportLogs">Export Logs</button>
