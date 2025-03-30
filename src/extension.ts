@@ -410,136 +410,156 @@ function generateDashboardHtml(logs: any[]): string {
         .join('');
 
     return `
-<!DOCTYPE html>
-<html>
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <style>
+        <!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Build Failure Dashboard</title>
+    <style>
+        :root {
+            --primary-color: #007acc;
+            --secondary-color: #005f99;
+            --background-light: #f4f4f4;
+            --background-dark: #1e1e1e;
+            --card-bg: #ffffff;
+            --text-color: #333;
+            --shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--background-light);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+            transition: all 0.3s ease-in-out;
+        }
+        h2 {
+            color: var(--primary-color);
+            border-bottom: 3px solid var(--primary-color);
+            padding-bottom: 10px;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        .stats, .stats-card, li {
+            background-color: var(--card-bg);
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: var(--shadow);
+            transition: transform 0.2s ease-in-out;
+        }
+        .stats:hover, .stats-card:hover, li:hover {
+            transform: translateY(-3px);
+        }
+        .stats {
+            margin-bottom: 20px;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+        ul {
+            list-style: none;
+            padding: 0;
+        }
+        li {
+            margin-bottom: 8px;
+            padding: 10px;
+        }
+        button {
+            padding: 12px 24px;
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.3s ease, transform 0.2s ease;
+        }
+        button:hover {
+            background: var(--secondary-color);
+            transform: scale(1.05);
+        }
+        .button-group {
+            margin-top: 20px;
+            display: flex;
+            gap: 15px;
+        }
+        .error-details {
+            white-space: pre-wrap;
+            background-color: #f8f8f8;
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 5px;
+            max-height: 300px;
+            overflow: auto;
+        }
+        details summary {
+            cursor: pointer;
+            font-weight: bold;
+        }
+        @media (prefers-color-scheme: dark) {
             body {
-                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-                background-color: #f4f4f4;
-                color: #333;
-                margin: 0;
-                padding: 20px;
+                background-color: var(--background-dark);
+                color: #ddd;
             }
-            h2 {
-                color: #007acc;
-                border-bottom: 2px solid #007acc;
-                padding-bottom: 10px;
-            }
-            .stats {
-                margin-bottom: 20px;
-                background-color: #fff;
-                padding: 15px;
-                border-radius: 8px;
-                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-            }
-            .stats-grid {
-                display: grid;
-                grid-template-columns: 1fr 1fr;
-                gap: 20px;
-                margin-top: 20px;
-            }
-            .stats-card {
-                background-color: #fff;
-                padding: 15px;
-                border-radius: 8px;
-                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-            }
-            ul {
-                list-style-type: none;
-                padding: 0;
-            }
-            li {
-                margin-bottom: 8px;
-                background-color: #fff;
-                padding: 10px;
-                border-radius: 8px;
-                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-            }
-            button {
-                padding: 10px 20px;
-                background-color: #007acc;
-                color: white;
-                border: none;
-                border-radius: 5px;
-                cursor: pointer;
-                transition: background-color 0.3s ease;
-                margin-right: 10px;
-            }
-            button:hover {
-                background-color: #005f99;
-            }
-            .container {
-                max-width: 800px;
-                margin: 0 auto;
-            }
-            .button-group {
-                margin-top: 20px;
+            .stats, .stats-card, li {
+                background-color: #252526;
+                color: #ddd;
             }
             .error-details {
-                white-space: pre-wrap;
-                background-color: #f8f8f8;
-                padding: 10px;
-                border-radius: 4px;
-                margin-top: 5px;
-                max-height: 300px;
-                overflow: auto;
+                background-color: #333;
             }
-            details summary {
-                cursor: pointer;
-                outline: none;
-            }
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <h2>Build Failure Dashboard</h2>
-            <div class="stats">
-                <p><strong>Total Failed Builds:</strong> ${failedBuilds}</p>
-                ${failedBuilds > MAX_LOG_ENTRIES
-            ? `<p class="warning">Showing most recent ${MAX_LOG_ENTRIES} entries (log rotation active)</p>`
-            : ''}
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Build Failure Dashboard</h2>
+        <div class="stats">
+            <p><strong>Total Failed Builds:</strong> ${failedBuilds}</p>
+            ${failedBuilds > MAX_LOG_ENTRIES
+                ? `<p class="warning">Showing most recent ${MAX_LOG_ENTRIES} entries (log rotation active)</p>`
+                : ''}
+        </div>
+        <div class="stats-grid">
+            <div class="stats-card">
+                <h3>Developer Statistics</h3>
+                <ul>${developerList || "<li>No developer data available</li>"}</ul>
             </div>
-            
-            <div class="stats-grid">
-                <div class="stats-card">
-                    <h3>Developer Statistics</h3>
-                    <ul>${developerList || "<li>No developer data available</li>"}</ul>
-                </div>
-                <div class="stats-card">
-                    <h3>Branch Statistics</h3>
-                    <ul>${branchList || "<li>No branch data available</li>"}</ul>
-                </div>
-                <div class="stats-card">
-                    <h3>Command Statistics</h3>
-                    <ul>${commandList || "<li>No command data available</li>"}</ul>
-                </div>
+            <div class="stats-card">
+                <h3>Branch Statistics</h3>
+                <ul>${branchList || "<li>No branch data available</li>"}</ul>
             </div>
-            
-            <h3>Most Common Errors (Top 20)</h3>
-            <ul>${errorList || "No errors logged yet."}</ul>
-            
-            <div class="button-group">
-                <button id="exportLogs">Export Logs</button>
-                <button id="clearLogs">Clear All Logs</button>
+            <div class="stats-card">
+                <h3>Command Statistics</h3>
+                <ul>${commandList || "<li>No command data available</li>"}</ul>
             </div>
         </div>
-        <script>
-            const vscode = acquireVsCodeApi();
-            document.getElementById("exportLogs").addEventListener("click", () => {
-                vscode.postMessage({ command: "exportLogs" });
-            });
-            document.getElementById("clearLogs").addEventListener("click", () => {
-                if (confirm("Are you sure you want to clear all logs? This cannot be undone.")) {
-                    vscode.postMessage({ command: "clearLogs" });
-                }
-            });
-        </script>
-    </body>
-</html>
-    `;
+        <h3>Most Common Errors (Top 20)</h3>
+        <ul>${errorList || "No errors logged yet."}</ul>
+        <div class="button-group">
+            <button id="exportLogs">Export Logs</button>
+            <button id="clearLogs">Clear All Logs</button>
+        </div>
+    </div>
+    <script>
+        const vscode = acquireVsCodeApi();
+        document.getElementById("exportLogs").addEventListener("click", () => {
+            vscode.postMessage({ command: "exportLogs" });
+        });
+        document.getElementById("clearLogs").addEventListener("click", () => {
+            if (confirm("Are you sure you want to clear all logs? This cannot be undone.")) {
+                vscode.postMessage({ command: "clearLogs" });
+            }
+        });
+    </script>
+</body>
+</html>`;
 }
 
 function generateErrorHtml(title: string, message: string): string {
