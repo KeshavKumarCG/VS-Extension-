@@ -25,6 +25,20 @@
         "command": "build-logger.showDashboard",
         "title": "Show Build Dashboard"
       }
+    ],
+    "keybindings": [
+      {
+        "command": "build-logger.trackBuilds",
+        "key": "ctrl+alt+b",
+        "mac": "cmd+alt+b",
+        "when": "editorTextFocus"
+      },
+      {
+        "command": "build-logger.showDashboard",
+        "key": "ctrl+alt+d",
+        "mac": "cmd+alt+d",
+        "when": "editorTextFocus"
+      }
     ]
   },
   "scripts": {
