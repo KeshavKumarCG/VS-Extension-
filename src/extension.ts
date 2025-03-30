@@ -15,6 +15,17 @@ export function activate(context: vscode.ExtensionContext) {
     // Get workspace path or use current directory as fallback
     workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || process.cwd();
 
+    if (!fs.existsSync(path.join(workspacePath, 'package.json'))) {
+        vscode.window.showWarningMessage(
+            'Build Logger: No package.json found in current workspace. Some features may not work properly.',
+            'Open Project Folder'
+        ).then(selection => {
+            if (selection === 'Open Project Folder') {
+                vscode.commands.executeCommand('vscode.openFolder');
+            }
+        });
+    }
+
     // Get log file path from configuration or use default
     const configLogPath = vscode.workspace.getConfiguration('build-logger').get<string>('logFilePath');
     logFilePath = configLogPath
@@ -59,15 +70,20 @@ async function runBuildProcess() {
     const buildCommand = getValidatedBuildCommand();
     const isWindows = process.platform === 'win32';
 
+    if (!workspacePath) {
+        vscode.window.showErrorMessage('No workspace folder open. Please open a project folder first.');
+        return;
+    }
     // Create terminal with appropriate shell for the platform
     buildTerminal = vscode.window.createTerminal({
         name: `Build Logger`,
         shellPath: isWindows ? "C:\\Windows\\System32\\cmd.exe" : undefined,
+        cwd : workspacePath
     });
     buildTerminal.show();
 
     // Log that we're starting the build
-    vscode.window.showInformationMessage(`Running build command: ${buildCommand}`);
+    vscode.window.showInformationMessage(`Running build command in ${workspacePath}: ${buildCommand}`);
 
     // Spawn the build process with appropriate command for the platform
     const buildProcess = isWindows
@@ -143,7 +159,18 @@ async function runBuildProcess() {
     });
 
     buildProcess.on('error', (err) => {
-        vscode.window.showErrorMessage(`Error running build command: ${err.message}`);
+        if (err.message.includes('ENOENT') && err.message.includes('package.json')) {
+            vscode.window.showErrorMessage(
+                `No package.json found in ${workspacePath}. Please ensure you're in a project directory.`,
+                'Open Project Folder'
+            ).then(selection => {
+                if (selection === 'Open Project Folder') {
+                    vscode.commands.executeCommand('vscode.openFolder');
+                }
+            });
+        } else {
+            vscode.window.showErrorMessage(`Error running build command: ${err.message}`);
+        }
     });
 }
 
@@ -158,6 +185,10 @@ function getValidatedBuildCommand(): string {
     // Prevent obvious command injection
     if (buildCommand.includes(';') || buildCommand.includes('&&') || buildCommand.includes('||')) {
         throw new Error('Build command contains potentially dangerous characters');
+    }
+
+    if (buildCommand.startsWith('npm ')) {
+        return `cd "${workspacePath}" && ${buildCommand}`;
     }
 
     return buildCommand;

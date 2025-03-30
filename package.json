@@ -10,6 +10,7 @@
   "categories": [
     "Other"
   ],
+  "icon": "logo.jpg",
   "main": "./dist/extension.js",
   "repository": {
     "type": "git",
@@ -19,27 +20,49 @@
     "commands": [
       {
         "command": "build-logger.trackBuilds",
-        "title": "Track Builds"
+        "title": "Track Builds",
+        "category": "Build Logger"
       },
       {
         "command": "build-logger.showDashboard",
-        "title": "Show Build Dashboard"
+        "title": "Show Build Dashboard",
+        "category": "Build Logger"
+      },
+      {
+        "command": "build-logger.exportLogs",
+        "title": "Export Build Logs",
+        "category": "Build Logger"
       }
     ],
     "keybindings": [
       {
         "command": "build-logger.trackBuilds",
-        "key": "ctrl+alt+b",
-        "mac": "cmd+alt+b",
+        "key": "ctrl+shift+alt+b",
+        "mac": "cmd+shift+alt+b",
         "when": "editorTextFocus"
       },
       {
         "command": "build-logger.showDashboard",
-        "key": "ctrl+alt+d",
-        "mac": "cmd+alt+d",
+        "key": "ctrl+shift+alt+d",
+        "mac": "cmd+shift+alt+d",
         "when": "editorTextFocus"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "Build Logger",
+      "properties": {
+        "build-logger.buildCommand": {
+          "type": "string",
+          "default": "npm run build",
+          "description": "The build command to execute"
+        },
+        "build-logger.logFilePath": {
+          "type": "string",
+          "default": "build_logs.json",
+          "description": "Relative path for storing build logs"
+        }
+      }
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run package",
@@ -73,7 +96,6 @@
     "typescript": "^5.8.2"
   },
   "dependencies": {
-    "axios": "^1.8.4",
-    "ollama": "^0.5.14"
+    "axios": "^1.8.4"
   }
 }
