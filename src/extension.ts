@@ -12,7 +12,7 @@ let logFilePath: string;
 let buildTerminal: vscode.Terminal | undefined;
 
 export function activate(context: vscode.ExtensionContext) {
-    // Get workspace path or use current directory as fallback
+   
     workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || process.cwd();
 
     if (!fs.existsSync(path.join(workspacePath, 'package.json'))) {
@@ -350,31 +350,31 @@ function generateDashboardHtml(logs: any[]): string {
     const commandStats: { [key: string]: number } = {};
 
     logs.forEach((log) => {
-        // Create a signature for the error by taking the first few lines
+        
         const errorSig = log.error.split('\n').slice(0, 3).join('\n').trim();
         errorCounts[errorSig] = (errorCounts[errorSig] || 0) + 1;
         errorExamples[errorSig] = log.error;
 
-        // Count by developer
+        
         if (log.developer) {
             developerStats[log.developer] = (developerStats[log.developer] || 0) + 1;
         }
 
-        // Count by branch
+       
         if (log.branch) {
             branchStats[log.branch] = (branchStats[log.branch] || 0) + 1;
         }
 
-        // Count by command
+       
         if (log.command) {
             commandStats[log.command] = (commandStats[log.command] || 0) + 1;
         }
     });
 
-    // Create HTML for error list
+    
     const errorList = Object.entries(errorCounts)
-        .sort((a, b) => b[1] - a[1]) // Sort by frequency
-        .slice(0, 20) // Limit to top 20
+        .sort((a, b) => b[1] - a[1]) 
+        .slice(0, 20) 
         .map(([errorSig, count]) => {
             const fullError = errorExamples[errorSig];
             const shortError = escapeHtml(errorSig.length > 200
@@ -391,19 +391,19 @@ function generateDashboardHtml(logs: any[]): string {
         })
         .join('');
 
-    // Create HTML for developer stats
+    
     const developerList = Object.entries(developerStats)
         .sort((a, b) => b[1] - a[1])
         .map(([developer, count]) => `<li><strong>${escapeHtml(developer)}:</strong> ${count} failures</li>`)
         .join('');
 
-    // Create HTML for branch stats
+    
     const branchList = Object.entries(branchStats)
         .sort((a, b) => b[1] - a[1])
         .map(([branch, count]) => `<li><strong>${escapeHtml(branch)}:</strong> ${count} failures</li>`)
         .join('');
 
-    // Create HTML for command stats
+   
     const commandList = Object.entries(commandStats)
         .sort((a, b) => b[1] - a[1])
         .map(([cmd, count]) => `<li><strong>${escapeHtml(cmd)}:</strong> ${count} failures</li>`)
