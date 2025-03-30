@@ -86,141 +86,161 @@ async function trackBuilds() {
 }
 
 async function runBuildProcess() {
+    try {
+        // Validate workspace path
+        if (!workspacePath || !fs.existsSync(workspacePath)) {
+            throw new Error('Invalid workspace path. Please open a project folder first.');
+        }
 
-    if (!workspacePath || !fs.existsSync(workspacePath)) {
-        vscode.window.showErrorMessage('Invalid workspace path. Please open a project folder first.');
-        return;
-    }
+        // Get and validate build command
+        const buildCommand = getValidatedBuildCommand();
+        const isWindows = process.platform === 'win32';
+        const shell = isWindows ? "cmd.exe" : "/bin/sh";
+        const shellArgs = isWindows ? ["/c"] : ["-c"];
 
-    const buildCommand = getValidatedBuildCommand();
-    const isWindows = process.platform === 'win32';
-
-    // Create terminal with appropriate shell for the platform
-    buildTerminal = vscode.window.createTerminal({
-        name: `Build Logger`,
-        shellPath: isWindows ? "C:\\Windows\\System32\\cmd.exe" : undefined,
-        cwd: workspacePath
-    });
-    buildTerminal.show();
-
-    // Log that we're starting the build
-    vscode.window.showInformationMessage(`Running build command in ${workspacePath}`);
-
-    // Spawn the build process with appropriate command for the platform
-    const buildProcess = isWindows
-        ? spawn("cmd.exe", ["/c", buildCommand], {
+        // Create terminal with proper environment
+        buildTerminal = vscode.window.createTerminal({
+            name: `Build Logger - ${path.basename(workspacePath)}`,
+            shellPath: isWindows ? "C:\\Windows\\System32\\cmd.exe" : undefined,
             cwd: workspacePath,
-            env: process.env,
-            stdio: ['pipe', 'pipe', 'pipe']
-        })
-        : spawn("/bin/sh", ["-c", buildCommand], {
+            env: {
+                ...process.env,
+                FORCE_COLOR: '1', // Ensure colored output
+                NODE_ENV: 'development' // Set default environment
+            }
+        });
+
+        buildTerminal.show();
+        vscode.window.showInformationMessage(`Running build in: ${workspacePath}`);
+
+        // Start build process with improved error handling
+        const buildProcess = spawn(shell, [...shellArgs, buildCommand], {
             cwd: workspacePath,
             env: process.env,
             stdio: ['pipe', 'pipe', 'pipe']
         });
 
-    let buildOutput = '';
-    let outputTimer: NodeJS.Timeout;
+        let buildOutput = '';
+        let outputTimer: NodeJS.Timeout;
+        let processExited = false;
 
-    const appendToTerminal = (data: string) => {
-        // Clear any pending output
-        if (outputTimer) {
-            clearTimeout(outputTimer);
-        }
+        // Handle process output
+        const handleOutput = (data: Buffer) => {
+            const text = data.toString();
+            buildOutput += text;
 
-        // Batch output to prevent flooding the terminal
-        buildOutput += data;
-        outputTimer = setTimeout(() => {
-            if (buildTerminal) {
-                // Use safer method to send text to terminal
-                const sanitized = data.replace(/[^\x20-\x7E\r\n]/g, '');
-                buildTerminal.sendText(`echo "${sanitized.replace(/"/g, '\\"')}"`, true);
+            // Throttle terminal updates to prevent flooding
+            if (outputTimer) {
+                clearTimeout(outputTimer);
             }
-        }, 100);
-    };
+            outputTimer = setTimeout(() => {
+                if (buildTerminal && !processExited) {
+                    const sanitized = text.replace(/[^\x20-\x7E\r\n]/g, '');
+                    buildTerminal.sendText(`echo "${sanitized.replace(/"/g, '\\"')}"`, true);
+                }
+            }, 100);
+        };
 
-    buildProcess.stdout.on('data', (data: Buffer) => {
-        appendToTerminal(data.toString());
-    });
+        buildProcess.stdout.on('data', handleOutput);
+        buildProcess.stderr.on('data', handleOutput);
 
-    buildProcess.stderr.on('data', (data: Buffer) => {
-        appendToTerminal(data.toString());
-    });
-
-    buildProcess.on('exit', async (code: number | null) => {
-        if (outputTimer) {
-            clearTimeout(outputTimer);
-        }
-
-        try {
-            if (code === 0) {
-                vscode.window.showInformationMessage("Build Successful ✅");
-            } else {
-                // Get developer and branch info
-                const [branchName, developer] = await Promise.all([
-                    getGitBranch(),
-                    getDeveloperName()
-                ]);
-
-                const logEntry = {
-                    timestamp: new Date().toISOString(),
-                    error: truncateString(buildOutput.trim(), MAX_ERROR_LENGTH),
-                    branch: branchName,
-                    developer: developer,
-                    exitCode: code,
-                    command: buildCommand
-                };
-
-                await saveLog(logEntry);
-                vscode.window.showErrorMessage(`Build failed with exit code ${code}! Check dashboard for details.`);
+        // Handle process completion
+        buildProcess.on('exit', async (code) => {
+            processExited = true;
+            if (outputTimer) {
+                clearTimeout(outputTimer);
             }
-        } catch (error) {
-            vscode.window.showErrorMessage(`Error handling build result: ${error instanceof Error ? error.message : String(error)}`);
-        }
-    });
 
-    buildProcess.on('error', (err) => {
-        if (err.message.includes('ENOENT')) {
-            if (err.message.includes('package.json')) {
-                vscode.window.showErrorMessage(
-                    `No package.json found in ${workspacePath}. Please open a project directory.`,
-                    'Open Folder'
-                ).then(selection => {
+            try {
+                if (code === 0) {
+                    vscode.window.showInformationMessage("Build Successful ✅");
+                } else {
+                    const [branchName, developer] = await Promise.all([
+                        getGitBranch().catch(() => 'unknown'),
+                        getDeveloperName().catch(() => 'Unknown Developer')
+                    ]);
+
+                    await saveLog({
+                        timestamp: new Date().toISOString(),
+                        error: truncateString(buildOutput.trim(), MAX_ERROR_LENGTH),
+                        branch: branchName,
+                        developer: developer,
+                        exitCode: code,
+                        command: buildCommand,
+                        workingDirectory: workspacePath,
+                        buildTime: Date.now()
+                    });
+
+                    vscode.window.showErrorMessage(`Build failed with exit code ${code}! Check dashboard for details.`);
+                }
+            } catch (error) {
+                console.error('Error handling build result:', error);
+                vscode.window.showErrorMessage(`Error processing build result: ${error instanceof Error ? error.message : String(error)}`);
+            }
+        });
+
+        // Handle process errors
+        buildProcess.on('error', (err) => {
+            processExited = true;
+            console.error('Build process error:', err);
+
+            let errorMessage = err.message;
+            if (err.message.includes('ENOENT')) {
+                if (err.message.includes('package.json')) {
+                    errorMessage = `No package.json found in ${workspacePath}. Please open a project directory.`;
+                } else if (err.message.includes('npm') || err.message.includes('yarn') || err.message.includes('mvn') || err.message.includes('gradle')) {
+                    errorMessage = `Build tool not found. Please ensure it's installed and in your PATH.`;
+                }
+            }
+
+            vscode.window.showErrorMessage(`Build error: ${errorMessage}`, 'Open Folder', 'Open Settings')
+                .then(selection => {
                     if (selection === 'Open Folder') {
                         vscode.commands.executeCommand('vscode.openFolder');
-                    }
-                });
-            } else {
-                vscode.window.showErrorMessage(
-                    `Command not found. Please ensure your build tools are installed and in your PATH.`,
-                    'Open Settings'
-                ).then(selection => {
-                    if (selection === 'Open Settings') {
+                    } else if (selection === 'Open Settings') {
                         vscode.commands.executeCommand('workbench.action.openSettings', 'terminal.integrated.env');
                     }
                 });
+        });
+
+        // Handle process close
+        buildProcess.on('close', () => {
+            processExited = true;
+            if (outputTimer) {
+                clearTimeout(outputTimer);
             }
-        } else {
-            vscode.window.showErrorMessage(`Build error: ${err.message}`);
-        }
-    });
+        });
+
+    } catch (error) {
+        console.error('Error in runBuildProcess:', error);
+        vscode.window.showErrorMessage(`Failed to start build: ${error instanceof Error ? error.message : String(error)}`);
+    }
 }
 
 function getValidatedBuildCommand(): string {
-    const buildCommand = vscode.workspace.getConfiguration('build-logger').get<string>('buildCommand') || 'npm run build';
+    let buildCommand = vscode.workspace.getConfiguration('build-logger').get<string>('buildCommand') || '';
 
-    // Basic validation - prevent empty or malicious commands
     if (!buildCommand.trim()) {
+        if (fs.existsSync(path.join(workspacePath, 'package.json'))) {
+            buildCommand = 'npm run build';
+        } else if (fs.existsSync(path.join(workspacePath, 'pom.xml'))) {
+            buildCommand = 'mvn clean install';
+        } else if (fs.existsSync(path.join(workspacePath, 'build.gradle'))) {
+            buildCommand = './gradlew build';
+        } else {
+            throw new Error('No build system detected and no build command configured');
+        }
+    }
+
+    buildCommand = buildCommand.trim();
+    if (!buildCommand) {
         throw new Error('Build command cannot be empty');
     }
 
-    // Prevent obvious command injection
-    if (buildCommand.includes(';') || buildCommand.includes('&&') || buildCommand.includes('||')) {
+    // Security checks
+    const dangerousPatterns = [';', '&&', '||', '`', '$('];
+    if (dangerousPatterns.some(pattern => buildCommand.includes(pattern))) {
         throw new Error('Build command contains potentially dangerous characters');
-    }
-
-    if (buildCommand.startsWith('npm ')) {
-        return `cd "${workspacePath}" && ${buildCommand}`;
     }
 
     return buildCommand;
@@ -270,11 +290,16 @@ function executeCommand(command: string): Promise<string> {
     });
 }
 
-async function saveLog(logEntry: object) {
+async function saveLog(logEntry: any) {
     try {
-        let logs: any[] = [];
+        // Ensure log directory exists
+        const logDir = path.dirname(logFilePath);
+        if (!fs.existsSync(logDir)) {
+            fs.mkdirSync(logDir, { recursive: true });
+        }
 
-        // Read existing logs if file exists
+        // Read existing logs
+        let logs: any[] = [];
         if (fs.existsSync(logFilePath)) {
             try {
                 const fileData = await fs.promises.readFile(logFilePath, 'utf8');
@@ -283,20 +308,33 @@ async function saveLog(logEntry: object) {
                     logs = [];
                 }
             } catch (error) {
-                console.error(`Error parsing log file: ${error instanceof Error ? error.message : String(error)}`);
+                console.error('Error parsing log file:', error);
                 logs = [];
             }
         }
 
-        // Add new log entry and enforce maximum size
-        logs.push(logEntry);
+        // Add new log entry with additional metadata
+        const enhancedEntry = {
+            ...logEntry,
+            extensionVersion: vscode.extensions.getExtension('KeshavKumar.build-logger')?.packageJSON.version || 'unknown',
+            vscodeVersion: vscode.version,
+            platform: process.platform
+        };
+
+        logs.push(enhancedEntry);
+
+        // Enforce maximum log size
         if (logs.length > MAX_LOG_ENTRIES) {
             logs = logs.slice(logs.length - MAX_LOG_ENTRIES);
         }
 
-        // Write logs to file
-        await fs.promises.writeFile(logFilePath, JSON.stringify(logs, null, 2));
+        // Write logs to file with error recovery
+        const tempPath = logFilePath + '.tmp';
+        await fs.promises.writeFile(tempPath, JSON.stringify(logs, null, 2));
+        await fs.promises.rename(tempPath, logFilePath);
+
     } catch (err) {
+        console.error('Error saving log:', err);
         const message = err instanceof Error ? err.message : String(err);
         vscode.window.showErrorMessage(`Error saving build log: ${message}`);
         throw err;
@@ -579,16 +617,16 @@ function generateDashboardHtml(logs: any[]): string {
             <button id="clearLogs">Clear All Logs</button>
         </div>
     </div>
-    <script>
-        const vscode = acquireVsCodeApi();
-        document.getElementById("exportLogs").addEventListener("click", () => {
-            vscode.postMessage({ command: "exportLogs" });
-        });
-        document.getElementById("clearLogs").addEventListener("click", () => {
-            if (confirm("Are you sure you want to clear all logs? This cannot be undone.")) {
-                vscode.postMessage({ command: "clearLogs" });
-            }
-        });
+   <script>
+    const vscode = acquireVsCodeApi();
+    document.getElementById("exportLogs").addEventListener("click", () => {
+        vscode.postMessage({ command: "exportLogs" });
+    });
+    document.getElementById("clearLogs").addEventListener("click", () => {
+        if (confirm("Are you sure you want to clear all logs? This cannot be undone.")) {
+            vscode.postMessage({ command: "clearLogs" });
+        }
+    });
     </script>
 </body>
 </html>`;
@@ -651,14 +689,56 @@ async function clearLogs() {
     try {
         await fs.promises.writeFile(logFilePath, JSON.stringify([], null, 2));
         vscode.window.showInformationMessage('Build logs cleared successfully');
+        return true;
     } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         vscode.window.showErrorMessage(`Failed to clear logs: ${message}`);
+        return false;
+    }
+}
+
+function normalizePath(pathString: string): string {
+    // Convert to forward slashes and remove duplicate slashes
+    return pathString.replace(/\\/g, '/').replace(/\/+/g, '/');
+}
+
+async function checkBuildTools(): Promise<boolean> {
+    try {
+        const buildCommand = getValidatedBuildCommand();
+        if (buildCommand.includes('npm') || buildCommand.includes('yarn')) {
+            await executeCommand('npm --version');
+            return true;
+        } else if (buildCommand.includes('mvn')) {
+            await executeCommand('mvn --version');
+            return true;
+        } else if (buildCommand.includes('gradle')) {
+            await executeCommand('gradle --version');
+            return true;
+        }
+        return true;
+    } catch (error) {
+        console.error('Build tools check failed:', error);
+        return false;
     }
 }
 
 export function deactivate() {
-    if (buildTerminal) {
-        buildTerminal.dispose();
+    try {
+        if (buildTerminal) {
+
+            try {
+                buildTerminal.sendText('exit', true);
+            } catch (error) {
+                console.error('Error sending exit command:', error);
+            }
+
+            try {
+                buildTerminal.dispose();
+            } catch (error) {
+                console.error('Error disposing terminal:', error);
+            }
+        }
+    } catch (error) {
+        console.error('Error in deactivate:', error);
     }
 }
