@@ -34,7 +34,7 @@
     "check-types": "tsc --noEmit",
     "lint": "eslint src",
     "test": "vscode-test",
-   "prebuild": "npx rimraf dist && mkdir dist",
+    "prebuild": "npx rimraf dist && mkdir dist",
     "build": "npm run prebuild && tsc && node esbuild.js",
     "watch:esbuild": "node esbuild.js --watch",
     "debug": "npm run compile && code --extensionDevelopmentPath=."

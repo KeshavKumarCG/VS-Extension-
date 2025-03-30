@@ -82,7 +82,9 @@ function saveLog(logEntry: object) {
             try {
                 const fileData = fs.readFileSync(logFilePath, 'utf8');
                 logs = fileData ? JSON.parse(fileData) : [];
-                if (!Array.isArray(logs)) logs = [];
+                if (!Array.isArray(logs)) {
+                    logs = [];
+                }
             } catch (error) {
                 logs = [];
             }
@@ -108,7 +110,9 @@ function showBuildDashboard() {
         try {
             const fileData = fs.readFileSync(logFilePath, 'utf8');
             logs = fileData ? JSON.parse(fileData) : [];
-            if (!Array.isArray(logs)) logs = [];
+            if (!Array.isArray(logs)) {
+                logs = [];
+            }
         } catch (error) {
             logs = [];
         }
