@@ -12,7 +12,7 @@ let logFilePath: string;
 let buildTerminal: vscode.Terminal | undefined;
 
 export function activate(context: vscode.ExtensionContext) {
-   
+
     workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || process.cwd();
 
     if (!fs.existsSync(path.join(workspacePath, 'package.json'))) {
@@ -78,7 +78,7 @@ async function runBuildProcess() {
     buildTerminal = vscode.window.createTerminal({
         name: `Build Logger`,
         shellPath: isWindows ? "C:\\Windows\\System32\\cmd.exe" : undefined,
-        cwd : workspacePath
+        cwd: workspacePath
     });
     buildTerminal.show();
 
@@ -350,31 +350,31 @@ function generateDashboardHtml(logs: any[]): string {
     const commandStats: { [key: string]: number } = {};
 
     logs.forEach((log) => {
-        
+
         const errorSig = log.error.split('\n').slice(0, 3).join('\n').trim();
         errorCounts[errorSig] = (errorCounts[errorSig] || 0) + 1;
         errorExamples[errorSig] = log.error;
 
-        
+
         if (log.developer) {
             developerStats[log.developer] = (developerStats[log.developer] || 0) + 1;
         }
 
-       
+
         if (log.branch) {
             branchStats[log.branch] = (branchStats[log.branch] || 0) + 1;
         }
 
-       
+
         if (log.command) {
             commandStats[log.command] = (commandStats[log.command] || 0) + 1;
         }
     });
 
-    
+
     const errorList = Object.entries(errorCounts)
-        .sort((a, b) => b[1] - a[1]) 
-        .slice(0, 20) 
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 20)
         .map(([errorSig, count]) => {
             const fullError = errorExamples[errorSig];
             const shortError = escapeHtml(errorSig.length > 200
@@ -391,19 +391,19 @@ function generateDashboardHtml(logs: any[]): string {
         })
         .join('');
 
-    
+
     const developerList = Object.entries(developerStats)
         .sort((a, b) => b[1] - a[1])
         .map(([developer, count]) => `<li><strong>${escapeHtml(developer)}:</strong> ${count} failures</li>`)
         .join('');
 
-    
+
     const branchList = Object.entries(branchStats)
         .sort((a, b) => b[1] - a[1])
         .map(([branch, count]) => `<li><strong>${escapeHtml(branch)}:</strong> ${count} failures</li>`)
         .join('');
 
-   
+
     const commandList = Object.entries(commandStats)
         .sort((a, b) => b[1] - a[1])
         .map(([cmd, count]) => `<li><strong>${escapeHtml(cmd)}:</strong> ${count} failures</li>`)
@@ -523,8 +523,8 @@ function generateDashboardHtml(logs: any[]): string {
         <div class="stats">
             <p><strong>Total Failed Builds:</strong> ${failedBuilds}</p>
             ${failedBuilds > MAX_LOG_ENTRIES
-                ? `<p class="warning">Showing most recent ${MAX_LOG_ENTRIES} entries (log rotation active)</p>`
-                : ''}
+            ? `<p class="warning">Showing most recent ${MAX_LOG_ENTRIES} entries (log rotation active)</p>`
+            : ''}
         </div>
         <div class="stats-grid">
             <div class="stats-card">
