@@ -24,11 +24,15 @@ export function activate(context: vscode.ExtensionContext) {
 }
 
 function runBuildProcess() {
-    const terminal = vscode.window.createTerminal(`Build Logger`);
+    const terminal = vscode.window.createTerminal({
+        name: `Build Logger`,
+        shellPath: "C:\\Windows\\System32\\cmd.exe", // Force CMD instead of PowerShell
+    });
     terminal.show();
+
     const buildCommand = vscode.workspace.getConfiguration('build-logger').get<string>('buildCommand') || 'npm run build';
 
-    const buildProcess = spawn(buildCommand, { shell: true, env: { ...process.env } });
+    const buildProcess = spawn("cmd.exe", ["/c", buildCommand], { env: { ...process.env } }); // Use CMD instead of PowerShell
     let buildOutput = '';
 
     buildProcess.stdout.on('data', (data: Buffer) => {
