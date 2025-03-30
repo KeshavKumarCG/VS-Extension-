@@ -529,15 +529,15 @@ function generateDashboardHtml(logs: any[]): string {
         <div class="stats-grid">
             <div class="stats-card">
                 <h3>Developer Statistics</h3>
-                <ul>${developerList || "<li>No developer data available</li>"}</ul>
+                <ul>${developerList || `<li>No developer data available</li>`}</ul>
             </div>
             <div class="stats-card">
                 <h3>Branch Statistics</h3>
-                <ul>${branchList || "<li>No branch data available</li>"}</ul>
+                <ul>${branchList || `<li>No branch data available</li>`}</ul>
             </div>
             <div class="stats-card">
                 <h3>Command Statistics</h3>
-                <ul>${commandList || "<li>No command data available</li>"}</ul>
+                <ul>${commandList || `<li>No command data available</li>`}</ul>
             </div>
         </div>
         <h3>Most Common Errors (Top 20)</h3>
