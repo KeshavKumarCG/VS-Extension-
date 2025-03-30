@@ -2,7 +2,7 @@
   "name": "build-logger",
   "displayName": "Build Logger",
   "description": "Logs build failures and provides analysis.",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "engines": {
     "vscode": "^1.98.0"
   },
