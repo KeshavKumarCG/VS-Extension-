@@ -1,7 +1,7 @@
 {
   "name": "build-logger",
-  "displayName": "build-logger",
-  "description": "\"Logs build failures and provides analysis.\"",
+  "displayName": "Build Logger",
+  "description": "Logs build failures and provides analysis.",
   "version": "0.0.1",
   "engines": {
     "vscode": "^1.98.0"
@@ -9,17 +9,20 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": [],
   "main": "./dist/extension.js",
   "contributes": {
     "commands": [
       {
-        "command": "build-logger.helloWorld",
-        "title": "Hello World"
+        "command": "build-logger.trackBuilds",
+        "title": "Track Builds"
+      },
+      {
+        "command": "build-logger.showDashboard",
+        "title": "Show Build Dashboard"
       }
     ]
   },
- "scripts": {
+  "scripts": {
     "vscode:prepublish": "npm run package",
     "compile": "npm run check-types && npm run lint && node esbuild.js",
     "watch": "npm-run-all -p watch:*",
@@ -33,7 +36,7 @@
     "lint": "eslint src",
     "test": "vscode-test",
     "debug": "npm run compile && code --extensionDevelopmentPath=."
-},
+  },
   "devDependencies": {
     "@types/vscode": "^1.98.0",
     "@types/mocha": "^10.0.10",
