@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import { spawn } from 'child_process';
+import axios from 'axios';
 
 const workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || process.cwd();
 const logFilePath = path.join(workspacePath, 'build_logs.json');
@@ -26,25 +27,29 @@ export function activate(context: vscode.ExtensionContext) {
 function runBuildProcess() {
     const terminal = vscode.window.createTerminal({
         name: `Build Logger`,
-        shellPath: "C:\\Windows\\System32\\cmd.exe", // Force CMD instead of PowerShell
+        shellPath: "C:\\Windows\\System32\\cmd.exe", 
     });
     terminal.show();
 
     const buildCommand = vscode.workspace.getConfiguration('build-logger').get<string>('buildCommand') || 'npm run build';
 
-    const buildProcess = spawn("cmd.exe", ["/c", buildCommand], { env: { ...process.env } }); // Use CMD instead of PowerShell
+    const buildProcess = spawn("cmd.exe", ["/c", buildCommand], { 
+        cwd: workspacePath, 
+        env: { ...process.env } 
+    });
+
     let buildOutput = '';
 
     buildProcess.stdout.on('data', (data: Buffer) => {
         const message = data.toString();
         buildOutput += message;
-        terminal.sendText(message, true);
+        terminal.sendText(`echo ${message}`, true); 
     });
 
     buildProcess.stderr.on('data', (data: Buffer) => {
         const message = data.toString();
         buildOutput += message;
-        terminal.sendText(message, true);
+        terminal.sendText(`echo ${message}`, true); 
     });
 
     buildProcess.on('exit', async (code: number) => {
@@ -52,7 +57,7 @@ function runBuildProcess() {
             vscode.window.showInformationMessage("Build Successful ✅");
         } else {
             const branchName = await getGitBranch();
-            const developer = (process.env.USER as string) || (process.env.USERNAME as string) || "Unknown";
+            const developer = process.env.USER || process.env.USERNAME || "Unknown";
 
             const logEntry = {
                 timestamp: new Date().toISOString(),
@@ -61,10 +66,16 @@ function runBuildProcess() {
                 developer: developer
             };
             saveLog(logEntry);
+
             vscode.window.showErrorMessage(`Build failed! Check dashboard for details.`);
         }
     });
+
+    buildProcess.on('error', (err) => {
+        vscode.window.showErrorMessage(`Error running build command: ${err.message}`);
+    });
 }
+
 
 function getGitBranch(): Promise<string> {
     return new Promise((resolve) => {
@@ -101,7 +112,22 @@ function saveLog(logEntry: object) {
     }
 }
 
-function showBuildDashboard() {
+async function explainError(errorMessage: string): Promise<string> {
+    try {
+        const response = await axios.post('http://localhost:11434/api/generate', {
+            model: 'codellama', // Make sure you have a suitable model like `codellama` or `mistral`
+            prompt: `Analyze this build error and provide a possible fix:\n\n"${errorMessage}"`,
+            stream: false
+        });
+
+        return response.data.response.trim();
+    } catch (err) {
+        console.error("AI explanation error:", err);
+        return "⚠️ AI could not generate a solution.";
+    }
+}
+
+async function showBuildDashboard() {
     const panel = vscode.window.createWebviewPanel(
         'buildLoggerDashboard',
         'Build Failure Dashboard',
@@ -123,15 +149,17 @@ function showBuildDashboard() {
     }
 
     const failedBuilds = logs.length;
-    const errorCounts: { [key: string]: number } = {};
-
-    logs.forEach((log) => {
-        errorCounts[log.error] = (errorCounts[log.error] || 0) + 1;
-    });
-
-    const errorList = Object.entries(errorCounts)
-        .map(([error, count]) => `<li><strong>${count}x</strong> ${error}</li>`)
-        .join('');
+    const errorList = await Promise.all(
+        logs.map(async (log) => {
+            const aiSuggestion = await explainError(log.error);
+            return `
+                <li>
+                    <strong>📌 Error:</strong> ${log.error} <br>
+                    <strong>🧠 AI Suggestion:</strong> ${aiSuggestion}
+                </li>
+            `;
+        })
+    );
 
     panel.webview.html = `
 <html>
@@ -167,54 +195,22 @@ function showBuildDashboard() {
                 border-radius: 8px;
                 box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
             }
-            button {
-                padding: 10px 20px;
-                background-color: #007acc;
-                color: white;
-                border: none;
-                border-radius: 5px;
-                cursor: pointer;
-                transition: background-color 0.3s ease;
-            }
-            button:hover {
-                background-color: #005f99;
-            }
-            .container {
-                max-width: 800px;
-                margin: 0 auto;
-            }
         </style>
     </head>
     <body>
         <div class="container">
-            <h2>Build Failure Dashboard</h2>
+            <h2>🚨 Build Failure Dashboard</h2>
             <div class="stats">
                 <p><strong>Total Failed Builds:</strong> ${failedBuilds}</p>
             </div>
-            <h3>Most Common Errors</h3>
-            <ul>${errorList || "&lt;li&gt;No errors logged yet.&lt;/li&gt;"}</ul>
-            <button id="exportLogs">Export Logs</button>
+            <h3>🔍 Most Recent Errors & Fixes</h3>
+            <ul>${errorList.join('') || "<li>No errors logged yet.</li>"}</ul>
         </div>
-        <script>
-            const vscode = acquireVsCodeApi();
-            document.getElementById("exportLogs").addEventListener("click", () => {
-                vscode.postMessage({ command: "exportLogs" });
-            });
-        </script>
     </body>
 </html>
     `;
-
-    panel.webview.onDidReceiveMessage(
-        (message) => {
-            if (message.command === "exportLogs") {
-                exportLogs();
-            }
-        },
-        undefined,
-        []
-    );
 }
+
 
 function exportLogs() {
     const exportPath = path.join(workspacePath, 'build_logs_export.json');
