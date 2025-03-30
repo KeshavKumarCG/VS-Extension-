@@ -3,7 +3,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { spawn } from 'child_process';
 
-const logFilePath = path.join(__dirname, 'build_logs.json');
+const workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || process.cwd();
+const logFilePath = path.join(workspacePath, 'build_logs.json');
 
 export function activate(context: vscode.ExtensionContext) {
     let trackBuildDisposable = vscode.commands.registerCommand('build-logger.trackBuilds', async () => {
@@ -47,7 +48,7 @@ function runBuildProcess() {
             vscode.window.showInformationMessage("Build Successful ✅");
         } else {
             const branchName = await getGitBranch();
-            const developer = process.env.USER || process.env.USERNAME || "Unknown";
+            const developer = (process.env.USER as string) || (process.env.USERNAME as string) || "Unknown";
             
             const logEntry = {
                 timestamp: new Date().toISOString(),
@@ -143,14 +144,30 @@ function showBuildDashboard() {
             </div>
             <h3>Most Common Errors</h3>
             <ul>${errorList || "<li>No errors logged yet.</li>"}</ul>
-            <button onclick="exportLogs()">Export Logs</button>
+            <button id="exportLogs">Export Logs</button>
+            <script>
+                const vscode = acquireVsCodeApi();
+                document.getElementById("exportLogs").addEventListener("click", () => {
+                    vscode.postMessage({ command: "exportLogs" });
+                });
+            </script>
         </body>
         </html>
     `;
+
+    panel.webview.onDidReceiveMessage(
+        (message) => {
+            if (message.command === "exportLogs") {
+                exportLogs();
+            }
+        },
+        undefined,
+        []
+    );
 }
 
 function exportLogs() {
-    const exportPath = path.join(vscode.workspace.rootPath || __dirname, 'build_logs_export.json');
+    const exportPath = path.join(workspacePath, 'build_logs_export.json');
     fs.copyFileSync(logFilePath, exportPath);
     vscode.window.showInformationMessage(`Logs exported to: ${exportPath}`);
 }
