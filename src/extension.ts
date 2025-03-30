@@ -14,12 +14,13 @@ export function activate(context: vscode.ExtensionContext) {
         terminal.sendText("npm run build", true);
 
         terminal.processId?.then(pid => {
-            vscode.window.onDidCloseTerminal(async (closedTerminal) => {
+            const listener = vscode.window.onDidCloseTerminal(async (closedTerminal) => {
                 const closedPid = await closedTerminal.processId;
                 if (closedPid === pid) {
                     captureBuildErrors();
                 }
             });
+            context.subscriptions.push(listener);
         });
     });
 
@@ -31,13 +32,13 @@ export function activate(context: vscode.ExtensionContext) {
 }
 
 async function captureBuildErrors() {
-    exec("npm run build 2>&1", async (error, stdout, stderr) => {
+    exec("npm run build", async (error, stdout, stderr) => {
         if (!error && !stderr) {
             vscode.window.showInformationMessage("Build Successful ✅");
             return;
         }
 
-        const errorMessage = stderr || stdout;
+        const errorMessage = error?.message || stderr || stdout;
         const branchName = await getGitBranch();
         const developer = process.env.USER || process.env.USERNAME || "Unknown";
 
@@ -63,15 +64,19 @@ function getGitBranch(): Promise<string> {
 
 function saveLog(logEntry: object) {
     try {
-        let logs = [];
+        let logs: any[] = [];
         if (fs.existsSync(logFilePath)) {
-            const fileData = fs.readFileSync(logFilePath, 'utf8');
-            logs = fileData ? JSON.parse(fileData) : [];
+            try {
+                const fileData = fs.readFileSync(logFilePath, 'utf8');
+                logs = fileData ? JSON.parse(fileData) : [];
+                if (!Array.isArray(logs)) logs = [];
+            } catch (error) {
+                logs = [];
+            }
         }
 
         logs.push(logEntry);
         fs.writeFileSync(logFilePath, JSON.stringify(logs, null, 2));
-
     } catch (err) {
         vscode.window.showErrorMessage("Error saving build log: " + err);
     }
@@ -85,16 +90,21 @@ function showBuildDashboard() {
         { enableScripts: true }
     );
 
-    let logs = [];
+    let logs: any[] = [];
     if (fs.existsSync(logFilePath)) {
-        const fileData = fs.readFileSync(logFilePath, 'utf8');
-        logs = fileData ? JSON.parse(fileData) : [];
+        try {
+            const fileData = fs.readFileSync(logFilePath, 'utf8');
+            logs = fileData ? JSON.parse(fileData) : [];
+            if (!Array.isArray(logs)) logs = [];
+        } catch (error) {
+            logs = [];
+        }
     }
 
     const failedBuilds = logs.length;
     const errorCounts: { [key: string]: number } = {};
 
-    logs.forEach((log: any) => {
+    logs.forEach((log) => {
         errorCounts[log.error] = (errorCounts[log.error] || 0) + 1;
     });
 
@@ -119,7 +129,7 @@ function showBuildDashboard() {
                 <p><strong>Total Failed Builds:</strong> ${failedBuilds}</p>
             </div>
             <h3>Most Common Errors</h3>
-            <ul>${errorList}</ul>
+            <ul>${errorList || "<li>No errors logged yet.</li>"}</ul>
         </body>
         </html>
     `;
