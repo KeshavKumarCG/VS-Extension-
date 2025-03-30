@@ -49,7 +49,7 @@ function runBuildProcess() {
         } else {
             const branchName = await getGitBranch();
             const developer = (process.env.USER as string) || (process.env.USERNAME as string) || "Unknown";
-            
+
             const logEntry = {
                 timestamp: new Date().toISOString(),
                 error: buildOutput.trim(),
@@ -130,33 +130,75 @@ function showBuildDashboard() {
         .join('');
 
     panel.webview.html = `
-        <html>
-        <head>
-            <style>
-                body { font-family: Arial, sans-serif; padding: 20px; }
-                h2 { color: #007acc; }
-                .stats { margin-bottom: 20px; }
-                ul { list-style-type: none; padding: 0; }
-                li { margin-bottom: 8px; }
-                button { padding: 10px; background-color: #007acc; color: white; border: none; cursor: pointer; }
-            </style>
-        </head>
-        <body>
+<html>
+    <head>
+        <style>
+            body {
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                background-color: #f4f4f4;
+                color: #333;
+                margin: 0;
+                padding: 20px;
+            }
+            h2 {
+                color: #007acc;
+                border-bottom: 2px solid #007acc;
+                padding-bottom: 10px;
+            }
+            .stats {
+                margin-bottom: 20px;
+                background-color: #fff;
+                padding: 15px;
+                border-radius: 8px;
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            }
+            ul {
+                list-style-type: none;
+                padding: 0;
+            }
+            li {
+                margin-bottom: 8px;
+                background-color: #fff;
+                padding: 10px;
+                border-radius: 8px;
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            }
+            button {
+                padding: 10px 20px;
+                background-color: #007acc;
+                color: white;
+                border: none;
+                border-radius: 5px;
+                cursor: pointer;
+                transition: background-color 0.3s ease;
+            }
+            button:hover {
+                background-color: #005f99;
+            }
+            .container {
+                max-width: 800px;
+                margin: 0 auto;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
             <h2>Build Failure Dashboard</h2>
             <div class="stats">
                 <p><strong>Total Failed Builds:</strong> ${failedBuilds}</p>
             </div>
             <h3>Most Common Errors</h3>
-            <ul>${errorList || "<li>No errors logged yet.</li>"}</ul>
+            <ul>${errorList || "&lt;li&gt;No errors logged yet.&lt;/li&gt;"}</ul>
             <button id="exportLogs">Export Logs</button>
-            <script>
-                const vscode = acquireVsCodeApi();
-                document.getElementById("exportLogs").addEventListener("click", () => {
-                    vscode.postMessage({ command: "exportLogs" });
-                });
-            </script>
-        </body>
-        </html>
+        </div>
+        <script>
+            const vscode = acquireVsCodeApi();
+            document.getElementById("exportLogs").addEventListener("click", () => {
+                vscode.postMessage({ command: "exportLogs" });
+            });
+        </script>
+    </body>
+</html>
     `;
 
     panel.webview.onDidReceiveMessage(
@@ -176,4 +218,4 @@ function exportLogs() {
     vscode.window.showInformationMessage(`Logs exported to: ${exportPath}`);
 }
 
-export function deactivate() {}
+export function deactivate() { }
