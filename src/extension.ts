@@ -1,63 +1,75 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
-import { exec } from 'child_process';
+import { spawn } from 'child_process';
 
 const logFilePath = path.join(__dirname, 'build_logs.json');
 
 export function activate(context: vscode.ExtensionContext) {
     let trackBuildDisposable = vscode.commands.registerCommand('build-logger.trackBuilds', async () => {
         vscode.window.showInformationMessage('Build Logger Activated');
-
-        const terminal = vscode.window.createTerminal(`Build Logger`);
-        terminal.show();
-        terminal.sendText("npm run build", true);
-
-        terminal.processId?.then(pid => {
-            const listener = vscode.window.onDidCloseTerminal(async (closedTerminal) => {
-                const closedPid = await closedTerminal.processId;
-                if (closedPid === pid) {
-                    captureBuildErrors();
-                }
-            });
-            context.subscriptions.push(listener);
-        });
+        runBuildProcess();
     });
 
     let openDashboardDisposable = vscode.commands.registerCommand('build-logger.showDashboard', () => {
         showBuildDashboard();
     });
 
-    context.subscriptions.push(trackBuildDisposable, openDashboardDisposable);
+    let exportLogsDisposable = vscode.commands.registerCommand('build-logger.exportLogs', () => {
+        exportLogs();
+    });
+
+    context.subscriptions.push(trackBuildDisposable, openDashboardDisposable, exportLogsDisposable);
 }
 
-async function captureBuildErrors() {
-    exec("npm run build", async (error, stdout, stderr) => {
-        if (!error && !stderr) {
+function runBuildProcess() {
+    const terminal = vscode.window.createTerminal(`Build Logger`);
+    terminal.show();
+    const buildCommand = vscode.workspace.getConfiguration('build-logger').get<string>('buildCommand') || 'npm run build';
+
+    const buildProcess = spawn(buildCommand, { shell: true, env: { ...process.env } });
+    let buildOutput = '';
+
+    buildProcess.stdout.on('data', (data: Buffer) => {
+        const message = data.toString();
+        buildOutput += message;
+        terminal.sendText(message, true);
+    });
+
+    buildProcess.stderr.on('data', (data: Buffer) => {
+        const message = data.toString();
+        buildOutput += message;
+        terminal.sendText(message, true);
+    });
+
+    buildProcess.on('exit', async (code: number) => {
+        if (code === 0) {
             vscode.window.showInformationMessage("Build Successful ✅");
-            return;
+        } else {
+            const branchName = await getGitBranch();
+            const developer = process.env.USER || process.env.USERNAME || "Unknown";
+            
+            const logEntry = {
+                timestamp: new Date().toISOString(),
+                error: buildOutput.trim(),
+                branch: branchName,
+                developer: developer
+            };
+            saveLog(logEntry);
+            vscode.window.showErrorMessage(`Build failed! Check dashboard for details.`);
         }
-
-        const errorMessage = error?.message || stderr || stdout;
-        const branchName = await getGitBranch();
-        const developer = process.env.USER || process.env.USERNAME || "Unknown";
-
-        const logEntry = {
-            timestamp: new Date().toISOString(),
-            error: errorMessage.trim(),
-            branch: branchName,
-            developer: developer
-        };
-
-        saveLog(logEntry);
-        vscode.window.showErrorMessage(`Build failed: ${errorMessage.split("\n")[0]}`);
     });
 }
 
 function getGitBranch(): Promise<string> {
     return new Promise((resolve) => {
-        exec("git rev-parse --abbrev-ref HEAD", (error, stdout) => {
-            resolve(error ? "unknown" : stdout.trim());
+        const gitProcess = spawn("git", ["rev-parse", "--abbrev-ref", "HEAD"], { env: { ...process.env } });
+        let output = '';
+        gitProcess.stdout.on('data', (data: Buffer) => {
+            output += data.toString();
+        });
+        gitProcess.on('close', () => {
+            resolve(output.trim() || 'unknown');
         });
     });
 }
@@ -121,6 +133,7 @@ function showBuildDashboard() {
                 .stats { margin-bottom: 20px; }
                 ul { list-style-type: none; padding: 0; }
                 li { margin-bottom: 8px; }
+                button { padding: 10px; background-color: #007acc; color: white; border: none; cursor: pointer; }
             </style>
         </head>
         <body>
@@ -130,9 +143,16 @@ function showBuildDashboard() {
             </div>
             <h3>Most Common Errors</h3>
             <ul>${errorList || "<li>No errors logged yet.</li>"}</ul>
+            <button onclick="exportLogs()">Export Logs</button>
         </body>
         </html>
     `;
+}
+
+function exportLogs() {
+    const exportPath = path.join(vscode.workspace.rootPath || __dirname, 'build_logs_export.json');
+    fs.copyFileSync(logFilePath, exportPath);
+    vscode.window.showInformationMessage(`Logs exported to: ${exportPath}`);
 }
 
 export function deactivate() {}
