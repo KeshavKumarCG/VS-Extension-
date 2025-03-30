@@ -10,7 +10,7 @@
   "categories": [
     "Other"
   ],
-  "icon": "./logo.jpg",
+  "icon": "icon.jpg",
   "main": "./dist/extension.js",
   "repository": {
     "type": "git",
