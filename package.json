@@ -3,6 +3,7 @@
   "displayName": "Build Logger",
   "description": "Logs build failures and provides analysis.",
   "version": "0.0.2",
+  "publisher": "Keshav Kumar",
   "engines": {
     "vscode": "^1.98.0"
   },
