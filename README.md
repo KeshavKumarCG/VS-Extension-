@@ -6,7 +6,7 @@
 A Visual Studio Code extension that tracks build failures, collects contextual information, and provides insightful analytics through an interactive dashboard.
 
 ![Build Dashboard Screenshot](https://via.placeholder.com/800x500.png?text=Build+Dashboard+Preview) 
-*(Replace with actual screenshot after publishing)*
+
 
 ## Features 🚀
 
