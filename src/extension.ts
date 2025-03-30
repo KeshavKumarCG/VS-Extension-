@@ -14,13 +14,13 @@ let buildTerminal: vscode.Terminal | undefined;
 export function activate(context: vscode.ExtensionContext) {
     // Get workspace path or use current directory as fallback
     workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || process.cwd();
-    
+
     // Get log file path from configuration or use default
     const configLogPath = vscode.workspace.getConfiguration('build-logger').get<string>('logFilePath');
-    logFilePath = configLogPath 
+    logFilePath = configLogPath
         ? path.resolve(workspacePath, configLogPath)
         : path.join(workspacePath, 'build_logs.json');
-    
+
     // Ensure log directory exists
     ensureLogDirectoryExists();
 
@@ -42,12 +42,12 @@ function ensureLogDirectoryExists() {
 async function trackBuilds() {
     try {
         vscode.window.showInformationMessage('Build Logger Activated');
-        
+
         // Clean up any existing terminal
         if (buildTerminal) {
             buildTerminal.dispose();
         }
-        
+
         await runBuildProcess();
     } catch (error) {
         vscode.window.showErrorMessage(`Failed to track builds: ${error instanceof Error ? error.message : String(error)}`);
@@ -62,7 +62,7 @@ async function runBuildProcess() {
     // Create terminal with appropriate shell for the platform
     buildTerminal = vscode.window.createTerminal({
         name: `Build Logger`,
-        shellPath: isWindows ? "C:\\Windows\\System32\\cmd.exe" : undefined, 
+        shellPath: isWindows ? "C:\\Windows\\System32\\cmd.exe" : undefined,
     });
     buildTerminal.show();
 
@@ -70,16 +70,16 @@ async function runBuildProcess() {
     vscode.window.showInformationMessage(`Running build command: ${buildCommand}`);
 
     // Spawn the build process with appropriate command for the platform
-    const buildProcess = isWindows 
-        ? spawn("cmd.exe", ["/c", buildCommand], { 
-            cwd: workspacePath, 
+    const buildProcess = isWindows
+        ? spawn("cmd.exe", ["/c", buildCommand], {
+            cwd: workspacePath,
             env: process.env,
-            stdio: ['pipe', 'pipe', 'pipe'] 
-        }) 
-        : spawn("/bin/sh", ["-c", buildCommand], { 
-            cwd: workspacePath, 
+            stdio: ['pipe', 'pipe', 'pipe']
+        })
+        : spawn("/bin/sh", ["-c", buildCommand], {
+            cwd: workspacePath,
             env: process.env,
-            stdio: ['pipe', 'pipe', 'pipe'] 
+            stdio: ['pipe', 'pipe', 'pipe']
         });
 
     let buildOutput = '';
@@ -133,7 +133,7 @@ async function runBuildProcess() {
                     exitCode: code,
                     command: buildCommand
                 };
-                
+
                 await saveLog(logEntry);
                 vscode.window.showErrorMessage(`Build failed with exit code ${code}! Check dashboard for details.`);
             }
@@ -149,17 +149,17 @@ async function runBuildProcess() {
 
 function getValidatedBuildCommand(): string {
     const buildCommand = vscode.workspace.getConfiguration('build-logger').get<string>('buildCommand') || 'npm run build';
-    
+
     // Basic validation - prevent empty or malicious commands
     if (!buildCommand.trim()) {
         throw new Error('Build command cannot be empty');
     }
-    
+
     // Prevent obvious command injection
     if (buildCommand.includes(';') || buildCommand.includes('&&') || buildCommand.includes('||')) {
         throw new Error('Build command contains potentially dangerous characters');
     }
-    
+
     return buildCommand;
 }
 
@@ -184,10 +184,10 @@ async function getDeveloperName(): Promise<string> {
         if (gitName.trim()) {
             return gitName.trim();
         }
-        
+
         // Fallback to environment variables
-        const username = process.env.USER || process.env.USERNAME || 
-                         process.env.LOGNAME || process.env.COMPUTERNAME || 'Unknown Developer';
+        const username = process.env.USER || process.env.USERNAME ||
+            process.env.LOGNAME || process.env.COMPUTERNAME || 'Unknown Developer';
         return username;
     } catch (error) {
         console.error(`Error getting developer name: ${error instanceof Error ? error.message : String(error)}`);
@@ -210,7 +210,7 @@ function executeCommand(command: string): Promise<string> {
 async function saveLog(logEntry: object) {
     try {
         let logs: any[] = [];
-        
+
         // Read existing logs if file exists
         if (fs.existsSync(logFilePath)) {
             try {
@@ -246,14 +246,14 @@ function showBuildDashboard() {
             'buildLoggerDashboard',
             'Build Failure Dashboard',
             vscode.ViewColumn.One,
-            { 
+            {
                 enableScripts: true,
                 localResourceRoots: [vscode.Uri.file(path.dirname(logFilePath))]
             }
         );
 
         loadAndDisplayLogs(panel);
-        
+
         panel.webview.onDidReceiveMessage(
             async (message) => {
                 try {
@@ -287,7 +287,7 @@ function showBuildDashboard() {
 async function loadAndDisplayLogs(panel: vscode.WebviewPanel) {
     try {
         let logs: any[] = [];
-        
+
         if (fs.existsSync(logFilePath)) {
             const fileData = await fs.promises.readFile(logFilePath, 'utf8');
             logs = fileData ? JSON.parse(fileData) : [];
@@ -300,7 +300,7 @@ async function loadAndDisplayLogs(panel: vscode.WebviewPanel) {
     } catch (error) {
         console.error(`Error reading log file for dashboard: ${error instanceof Error ? error.message : String(error)}`);
         panel.webview.html = generateErrorHtml(
-            'Failed to load logs', 
+            'Failed to load logs',
             error instanceof Error ? error.message : String(error)
         );
     }
@@ -308,11 +308,11 @@ async function loadAndDisplayLogs(panel: vscode.WebviewPanel) {
 
 function generateDashboardHtml(logs: any[]): string {
     const failedBuilds = logs.length;
-    
+
     // Group errors by type for display
     const errorCounts: { [key: string]: number } = {};
     const errorExamples: { [key: string]: string } = {};
-    
+
     // Group by developer and branch for stats
     const developerStats: { [key: string]: number } = {};
     const branchStats: { [key: string]: number } = {};
@@ -323,17 +323,17 @@ function generateDashboardHtml(logs: any[]): string {
         const errorSig = log.error.split('\n').slice(0, 3).join('\n').trim();
         errorCounts[errorSig] = (errorCounts[errorSig] || 0) + 1;
         errorExamples[errorSig] = log.error;
-        
+
         // Count by developer
         if (log.developer) {
             developerStats[log.developer] = (developerStats[log.developer] || 0) + 1;
         }
-        
+
         // Count by branch
         if (log.branch) {
             branchStats[log.branch] = (branchStats[log.branch] || 0) + 1;
         }
-        
+
         // Count by command
         if (log.command) {
             commandStats[log.command] = (commandStats[log.command] || 0) + 1;
@@ -346,8 +346,8 @@ function generateDashboardHtml(logs: any[]): string {
         .slice(0, 20) // Limit to top 20
         .map(([errorSig, count]) => {
             const fullError = errorExamples[errorSig];
-            const shortError = escapeHtml(errorSig.length > 200 
-                ? errorSig.substring(0, 200) + '...' 
+            const shortError = escapeHtml(errorSig.length > 200
+                ? errorSig.substring(0, 200) + '...'
                 : errorSig);
             return `
                 <li>
@@ -359,19 +359,19 @@ function generateDashboardHtml(logs: any[]): string {
             `;
         })
         .join('');
-        
+
     // Create HTML for developer stats
     const developerList = Object.entries(developerStats)
         .sort((a, b) => b[1] - a[1])
         .map(([developer, count]) => `<li><strong>${escapeHtml(developer)}:</strong> ${count} failures</li>`)
         .join('');
-        
+
     // Create HTML for branch stats
     const branchList = Object.entries(branchStats)
         .sort((a, b) => b[1] - a[1])
         .map(([branch, count]) => `<li><strong>${escapeHtml(branch)}:</strong> ${count} failures</li>`)
         .join('');
-        
+
     // Create HTML for command stats
     const commandList = Object.entries(commandStats)
         .sort((a, b) => b[1] - a[1])
@@ -467,9 +467,9 @@ function generateDashboardHtml(logs: any[]): string {
             <h2>Build Failure Dashboard</h2>
             <div class="stats">
                 <p><strong>Total Failed Builds:</strong> ${failedBuilds}</p>
-                ${failedBuilds > MAX_LOG_ENTRIES 
-                    ? `<p class="warning">Showing most recent ${MAX_LOG_ENTRIES} entries (log rotation active)</p>` 
-                    : ''}
+                ${failedBuilds > MAX_LOG_ENTRIES
+            ? `<p class="warning">Showing most recent ${MAX_LOG_ENTRIES} entries (log rotation active)</p>`
+            : ''}
             </div>
             
             <div class="stats-grid">
