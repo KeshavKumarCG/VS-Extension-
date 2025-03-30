@@ -13,7 +13,7 @@ let buildTerminal: vscode.Terminal | undefined;
 
 export function activate(context: vscode.ExtensionContext) {
 
-    workspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || process.cwd();
+    workspacePath = getCorrectWorkspacePath();
 
     if (!fs.existsSync(path.join(workspacePath, 'package.json'))) {
         vscode.window.showWarningMessage(
@@ -43,6 +43,26 @@ export function activate(context: vscode.ExtensionContext) {
     );
 }
 
+function getCorrectWorkspacePath(): string {
+
+    if (vscode.workspace.workspaceFolders?.length) {
+        return vscode.workspace.workspaceFolders[0].uri.fsPath;
+    }
+
+    if (vscode.window.activeTextEditor?.document.uri.fsPath) {
+        return path.dirname(vscode.window.activeTextEditor.document.uri.fsPath);
+    }
+
+    const cwd = process.cwd();
+    const vscodeInstallPath = path.dirname(process.execPath);
+
+    if (cwd.startsWith(vscodeInstallPath)) {
+        return path.dirname(cwd);
+    }
+
+    return cwd;
+}
+
 function ensureLogDirectoryExists() {
     const logDir = path.dirname(logFilePath);
     if (!fs.existsSync(logDir)) {
@@ -66,14 +86,15 @@ async function trackBuilds() {
 }
 
 async function runBuildProcess() {
-    // Get build command from configuration with validation
+
+    if (!workspacePath || !fs.existsSync(workspacePath)) {
+        vscode.window.showErrorMessage('Invalid workspace path. Please open a project folder first.');
+        return;
+    }
+
     const buildCommand = getValidatedBuildCommand();
     const isWindows = process.platform === 'win32';
 
-    if (!workspacePath) {
-        vscode.window.showErrorMessage('No workspace folder open. Please open a project folder first.');
-        return;
-    }
     // Create terminal with appropriate shell for the platform
     buildTerminal = vscode.window.createTerminal({
         name: `Build Logger`,
@@ -83,7 +104,7 @@ async function runBuildProcess() {
     buildTerminal.show();
 
     // Log that we're starting the build
-    vscode.window.showInformationMessage(`Running build command in ${workspacePath}: ${buildCommand}`);
+    vscode.window.showInformationMessage(`Running build command in ${workspacePath}`);
 
     // Spawn the build process with appropriate command for the platform
     const buildProcess = isWindows
@@ -159,17 +180,28 @@ async function runBuildProcess() {
     });
 
     buildProcess.on('error', (err) => {
-        if (err.message.includes('ENOENT') && err.message.includes('package.json')) {
-            vscode.window.showErrorMessage(
-                `No package.json found in ${workspacePath}. Please ensure you're in a project directory.`,
-                'Open Project Folder'
-            ).then(selection => {
-                if (selection === 'Open Project Folder') {
-                    vscode.commands.executeCommand('vscode.openFolder');
-                }
-            });
+        if (err.message.includes('ENOENT')) {
+            if (err.message.includes('package.json')) {
+                vscode.window.showErrorMessage(
+                    `No package.json found in ${workspacePath}. Please open a project directory.`,
+                    'Open Folder'
+                ).then(selection => {
+                    if (selection === 'Open Folder') {
+                        vscode.commands.executeCommand('vscode.openFolder');
+                    }
+                });
+            } else {
+                vscode.window.showErrorMessage(
+                    `Command not found. Please ensure your build tools are installed and in your PATH.`,
+                    'Open Settings'
+                ).then(selection => {
+                    if (selection === 'Open Settings') {
+                        vscode.commands.executeCommand('workbench.action.openSettings', 'terminal.integrated.env');
+                    }
+                });
+            }
         } else {
-            vscode.window.showErrorMessage(`Error running build command: ${err.message}`);
+            vscode.window.showErrorMessage(`Build error: ${err.message}`);
         }
     });
 }
