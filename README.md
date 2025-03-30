@@ -1,71 +1,43 @@
-# build-logger README
+🚀 Build Logger
 
-This is the README for your extension "build-logger". After writing up a brief description, we recommend including the following sections.
+Build Logger is a VS Code extension that logs build failures, provides insights into errors, and offers a failure dashboard for debugging.
+🔧 Features
 
-## Features
+    Track Builds: Start a build process and capture failures.
 
-Describe specific features of your extension including screenshots of your extension in action. Image paths are relative to this README file.
+    View Build Dashboard: See build failures, error patterns, and logs.
 
-For example if there is an image subfolder under your extension project workspace:
+    Export Logs: Save error logs for further debugging.
 
-\!\[feature X\]\(images/feature-x.png\)
+📌 Requirements
 
-> Tip: Many popular extensions utilize animations. This is an excellent way to show off your extension! We recommend short, focused animations that are easy to follow.
+    Node.js & npm installed.
 
-## Requirements
+    esbuild and typescript dependencies installed.
 
-If you have any requirements or dependencies, add a section describing those and how to install and configure them.
+⚙️ Commands
 
-## Extension Settings
+This extension provides the following commands in Command Palette (Ctrl+Shift+P):
 
-Include if your extension adds any VS Code settings through the `contributes.configuration` extension point.
+    Track Builds → Starts tracking your build process.
 
-For example:
+    Show Build Dashboard → Opens the build failure dashboard.
 
-This extension contributes the following settings:
+🚀 Usage
 
-* `myExtension.enable`: Enable/disable this extension.
-* `myExtension.thing`: Set to `blah` to do something.
+    Install the extension.
 
-## Known Issues
+    Open the Command Palette (Ctrl+Shift+P).
 
-Calling out known issues can help limit users opening duplicate issues against your extension.
+    Run Track Builds to start tracking.
 
-## Release Notes
+    If a build fails, check the Build Dashboard for error logs.
 
-Users appreciate release notes as you update your extension.
+🛠️ Known Issues
 
-### 1.0.0
+    No known issues. Please report any bugs!
 
-Initial release of ...
+📖 Release Notes
+v0.0.1
 
-### 1.0.1
-
-Fixed issue #.
-
-### 1.1.0
-
-Added features X, Y, and Z.
-
----
-
-## Following extension guidelines
-
-Ensure that you've read through the extensions guidelines and follow the best practices for creating your extension.
-
-* [Extension Guidelines](https://code.visualstudio.com/api/references/extension-guidelines)
-
-## Working with Markdown
-
-You can author your README using Visual Studio Code. Here are some useful editor keyboard shortcuts:
-
-* Split the editor (`Cmd+\` on macOS or `Ctrl+\` on Windows and Linux).
-* Toggle preview (`Shift+Cmd+V` on macOS or `Shift+Ctrl+V` on Windows and Linux).
-* Press `Ctrl+Space` (Windows, Linux, macOS) to see a list of Markdown snippets.
-
-## For more information
-
-* [Visual Studio Code's Markdown Support](http://code.visualstudio.com/docs/languages/markdown)
-* [Markdown Syntax Reference](https://help.github.com/articles/markdown-basics/)
-
-**Enjoy!**
+    Initial release of Build Logger! 🎉

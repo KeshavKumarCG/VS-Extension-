@@ -10,10 +10,8 @@
     "Other"
   ],
   "main": "./dist/extension.js",
-  "activationEvents": [
-    "onCommand:build-logger.trackBuilds",
-    "onCommand:build-logger.showDashboard"
-  ],
+ 
+  "activationEvents": [],
   "contributes": {
     "commands": [
       {
