@@ -363,8 +363,11 @@ function showBuildDashboard() {
                             await exportLogs();
                             break;
                         case "clearLogs":
-                            await clearLogs();
-                            loadAndDisplayLogs(panel); // Refresh the dashboard
+                            const success = await clearLogs();
+                            if (success) {
+                                // Refresh the dashboard after clearing logs
+                                loadAndDisplayLogs(panel);
+                            }
                             break;
                         default:
                             console.warn(`Unknown command received: ${message.command}`);
@@ -617,7 +620,7 @@ function generateDashboardHtml(logs: any[]): string {
             <button id="clearLogs">Clear All Logs</button>
         </div>
     </div>
-   <script>
+<script>
     const vscode = acquireVsCodeApi();
     document.getElementById("exportLogs").addEventListener("click", () => {
         vscode.postMessage({ command: "exportLogs" });
@@ -627,7 +630,7 @@ function generateDashboardHtml(logs: any[]): string {
             vscode.postMessage({ command: "clearLogs" });
         }
     });
-    </script>
+</script>
 </body>
 </html>`;
 }
@@ -685,7 +688,7 @@ async function exportLogs() {
     }
 }
 
-async function clearLogs() {
+async function clearLogs(): Promise<boolean> {
     try {
         await fs.promises.writeFile(logFilePath, JSON.stringify([], null, 2));
         vscode.window.showInformationMessage('Build logs cleared successfully');
