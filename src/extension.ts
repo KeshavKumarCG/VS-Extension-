@@ -113,8 +113,25 @@ async function runBuildProcess() {
         buildTerminal.show();
         vscode.window.showInformationMessage(`Running build in: ${workspacePath}`);
 
+        // For Windows, construct a properly quoted command
+        let finalCommand = buildCommand;
+        if (isWindows) {
+            // If the workspace contains spaces, we need to properly quote it when using cd command
+            if (buildCommand.includes('cd ') && workspacePath.includes(' ')) {
+                // Replace the cd command with properly quoted path
+                // Assume format is "cd path && command"
+                const cdPart = buildCommand.substring(0, buildCommand.indexOf('&&')).trim();
+                const restPart = buildCommand.substring(buildCommand.indexOf('&&')).trim();
+                
+                // Make sure the path is properly quoted
+                if (!cdPart.includes('"')) {
+                    finalCommand = `cd "${workspacePath}" ${restPart}`;
+                }
+            }
+        }
+
         // Start build process with improved error handling
-        const buildProcess = spawn(shell, [...shellArgs, buildCommand], {
+        const buildProcess = spawn(shell, [...shellArgs, finalCommand], {
             cwd: workspacePath,
             env: process.env,
             stdio: ['pipe', 'pipe', 'pipe']
@@ -217,12 +234,19 @@ async function runBuildProcess() {
     }
 }
 
+
 function getValidatedBuildCommand(): string {
     let buildCommand = vscode.workspace.getConfiguration('build-logger').get<string>('buildCommand') || '';
 
     if (!buildCommand.trim()) {
+        const isWindows = process.platform === 'win32';
         if (fs.existsSync(path.join(workspacePath, 'package.json'))) {
-            buildCommand = 'npm run build';
+            // For Windows with spaces in path, we need to be careful with the cd command
+            if (isWindows && workspacePath.includes(' ')) {
+                buildCommand = `npm run build`;  // Just run the command in the current directory
+            } else {
+                buildCommand = 'npm run build';
+            }
         } else if (fs.existsSync(path.join(workspacePath, 'pom.xml'))) {
             buildCommand = 'mvn clean install';
         } else if (fs.existsSync(path.join(workspacePath, 'build.gradle'))) {
