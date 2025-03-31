@@ -72,22 +72,44 @@ function ensureLogDirectoryExists() {
 
 async function trackBuilds() {
     try {
-        vscode.window.showInformationMessage('Build Logger Activated');
+        // Verify workspace path is valid
+        workspacePath = getCorrectWorkspacePath();
+        if (!fs.existsSync(workspacePath)) {
+            throw new Error('Invalid workspace path. Please open a project folder first.');
+        }
 
         // Clean up any existing terminal
         if (buildTerminal) {
             buildTerminal.dispose();
         }
 
+        vscode.window.showInformationMessage('Build Logger Activated - Tracking builds...');
+
+        // Initialize log file path (in case it changed)
+        const configLogPath = vscode.workspace.getConfiguration('build-logger').get<string>('logFilePath');
+        logFilePath = configLogPath
+            ? path.resolve(workspacePath, configLogPath)
+            : path.join(workspacePath, 'build_logs.json');
+
+        ensureLogDirectoryExists();
+
         await runBuildProcess();
     } catch (error) {
-        vscode.window.showErrorMessage(`Failed to track builds: ${error instanceof Error ? error.message : String(error)}`);
+        console.error('Error in trackBuilds:', error);
+        vscode.window.showErrorMessage(
+            `Failed to track builds: ${error instanceof Error ? error.message : String(error)}`,
+            'Open Folder'
+        ).then(selection => {
+            if (selection === 'Open Folder') {
+                vscode.commands.executeCommand('vscode.openFolder');
+            }
+        });
     }
 }
 
 async function runBuildProcess() {
     try {
-        // Validate workspace path
+        // Validate workspace path again (in case it changed)
         if (!workspacePath || !fs.existsSync(workspacePath)) {
             throw new Error('Invalid workspace path. Please open a project folder first.');
         }
@@ -95,42 +117,32 @@ async function runBuildProcess() {
         // Get and validate build command
         const buildCommand = getValidatedBuildCommand();
         const isWindows = process.platform === 'win32';
-        const shell = isWindows ? "cmd.exe" : "/bin/sh";
+        const shell = isWindows ? "cmd.exe" : "/bin/bash"; // Using bash instead of sh for better compatibility
         const shellArgs = isWindows ? ["/c"] : ["-c"];
 
         // Create terminal with proper environment
         buildTerminal = vscode.window.createTerminal({
             name: `Build Logger - ${path.basename(workspacePath)}`,
-            shellPath: isWindows ? "C:\\Windows\\System32\\cmd.exe" : undefined,
+            shellPath: isWindows ? process.env.ComSpec || "cmd.exe" : shell,
             cwd: workspacePath,
             env: {
                 ...process.env,
-                FORCE_COLOR: '1', // Ensure colored output
-                NODE_ENV: 'development' // Set default environment
+                FORCE_COLOR: '1',
+                NODE_ENV: 'development',
+                PATH: process.env.PATH // Ensure PATH is preserved
             }
         });
 
         buildTerminal.show();
         vscode.window.showInformationMessage(`Running build in: ${workspacePath}`);
 
-        // For Windows, construct a properly quoted command
+        // Handle paths with spaces on Windows
         let finalCommand = buildCommand;
-        if (isWindows) {
-            // If the workspace contains spaces, we need to properly quote it when using cd command
-            if (buildCommand.includes('cd ') && workspacePath.includes(' ')) {
-                // Replace the cd command with properly quoted path
-                // Assume format is "cd path && command"
-                const cdPart = buildCommand.substring(0, buildCommand.indexOf('&&')).trim();
-                const restPart = buildCommand.substring(buildCommand.indexOf('&&')).trim();
-                
-                // Make sure the path is properly quoted
-                if (!cdPart.includes('"')) {
-                    finalCommand = `cd "${workspacePath}" ${restPart}`;
-                }
-            }
+        if (isWindows && workspacePath.includes(' ')) {
+            finalCommand = `cd "${workspacePath}" && ${buildCommand}`;
         }
 
-        // Start build process with improved error handling
+        // Start build process
         const buildProcess = spawn(shell, [...shellArgs, finalCommand], {
             cwd: workspacePath,
             env: process.env,
@@ -141,19 +153,22 @@ async function runBuildProcess() {
         let outputTimer: NodeJS.Timeout;
         let processExited = false;
 
-        // Handle process output
         const handleOutput = (data: Buffer) => {
             const text = data.toString();
             buildOutput += text;
 
-            // Throttle terminal updates to prevent flooding
             if (outputTimer) {
                 clearTimeout(outputTimer);
             }
+
             outputTimer = setTimeout(() => {
                 if (buildTerminal && !processExited) {
-                    const sanitized = text.replace(/[^\x20-\x7E\r\n]/g, '');
-                    buildTerminal.sendText(`echo "${sanitized.replace(/"/g, '\\"')}"`, true);
+                    try {
+                        const sanitized = text.replace(/[^\x20-\x7E\r\n]/g, '');
+                        buildTerminal.sendText(`echo "${sanitized.replace(/"/g, '\\"')}"`, true);
+                    } catch (error) {
+                        console.error('Error sending output to terminal:', error);
+                    }
                 }
             }, 100);
         };
@@ -161,7 +176,6 @@ async function runBuildProcess() {
         buildProcess.stdout.on('data', handleOutput);
         buildProcess.stderr.on('data', handleOutput);
 
-        // Handle process completion
         buildProcess.on('exit', async (code) => {
             processExited = true;
             if (outputTimer) {
@@ -196,31 +210,12 @@ async function runBuildProcess() {
             }
         });
 
-        // Handle process errors
         buildProcess.on('error', (err) => {
             processExited = true;
             console.error('Build process error:', err);
-
-            let errorMessage = err.message;
-            if (err.message.includes('ENOENT')) {
-                if (err.message.includes('package.json')) {
-                    errorMessage = `No package.json found in ${workspacePath}. Please open a project directory.`;
-                } else if (err.message.includes('npm') || err.message.includes('yarn') || err.message.includes('mvn') || err.message.includes('gradle')) {
-                    errorMessage = `Build tool not found. Please ensure it's installed and in your PATH.`;
-                }
-            }
-
-            vscode.window.showErrorMessage(`Build error: ${errorMessage}`, 'Open Folder', 'Open Settings')
-                .then(selection => {
-                    if (selection === 'Open Folder') {
-                        vscode.commands.executeCommand('vscode.openFolder');
-                    } else if (selection === 'Open Settings') {
-                        vscode.commands.executeCommand('workbench.action.openSettings', 'terminal.integrated.env');
-                    }
-                });
+            handleBuildError(err);
         });
 
-        // Handle process close
         buildProcess.on('close', () => {
             processExited = true;
             if (outputTimer) {
@@ -230,27 +225,46 @@ async function runBuildProcess() {
 
     } catch (error) {
         console.error('Error in runBuildProcess:', error);
-        vscode.window.showErrorMessage(`Failed to start build: ${error instanceof Error ? error.message : String(error)}`);
+        handleBuildError(error);
     }
+}
+
+function handleBuildError(error: unknown) {
+    let errorMessage = error instanceof Error ? error.message : String(error);
+
+    if (error instanceof Error && 'message' in error) {
+        if (error.message.includes('ENOENT')) {
+            if (error.message.includes('package.json')) {
+                errorMessage = `No package.json found in workspace. Please open a project directory.`;
+            } else if (error.message.includes('npm') || error.message.includes('yarn') ||
+                error.message.includes('mvn') || error.message.includes('gradle')) {
+                errorMessage = `Build tool not found. Please ensure it's installed and in your PATH.`;
+            }
+        }
+    }
+
+    vscode.window.showErrorMessage(`Build error: ${errorMessage}`, 'Open Folder', 'Open Settings')
+        .then(selection => {
+            if (selection === 'Open Folder') {
+                vscode.commands.executeCommand('vscode.openFolder');
+            } else if (selection === 'Open Settings') {
+                vscode.commands.executeCommand('workbench.action.openSettings', 'terminal.integrated.env');
+            }
+        });
 }
 
 
 function getValidatedBuildCommand(): string {
     let buildCommand = vscode.workspace.getConfiguration('build-logger').get<string>('buildCommand') || '';
+    const isWindows = process.platform === 'win32';
 
     if (!buildCommand.trim()) {
-        const isWindows = process.platform === 'win32';
         if (fs.existsSync(path.join(workspacePath, 'package.json'))) {
-            // For Windows with spaces in path, we need to be careful with the cd command
-            if (isWindows && workspacePath.includes(' ')) {
-                buildCommand = `npm run build`;  // Just run the command in the current directory
-            } else {
-                buildCommand = 'npm run build';
-            }
+            buildCommand = isWindows ? 'npm.cmd run build' : 'npm run build';
         } else if (fs.existsSync(path.join(workspacePath, 'pom.xml'))) {
             buildCommand = 'mvn clean install';
         } else if (fs.existsSync(path.join(workspacePath, 'build.gradle'))) {
-            buildCommand = './gradlew build';
+            buildCommand = isWindows ? 'gradlew.bat build' : './gradlew build';
         } else {
             throw new Error('No build system detected and no build command configured');
         }
