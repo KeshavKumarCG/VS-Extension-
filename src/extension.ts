@@ -659,15 +659,17 @@ function generateDashboardHtml(logs: any[]): string {
         </div>
     </div>
 <script>
-    const vscode = acquireVsCodeApi();
-    document.getElementById("exportLogs").addEventListener("click", () => {
-        vscode.postMessage({ command: "exportLogs" });
-    });
-    document.getElementById("clearLogs").addEventListener("click", () => {
-        if (confirm("Are you sure you want to clear all logs? This cannot be undone.")) {
-            vscode.postMessage({ command: "clearLogs" });
-        }
-    });
+    (function() {
+        const vscode = acquireVsCodeApi();
+        document.getElementById("exportLogs").addEventListener("click", () => {
+            vscode.postMessage({ command: "exportLogs" });
+        });
+        document.getElementById("clearLogs").addEventListener("click", () => {
+            if (confirm("Are you sure you want to clear all logs? This cannot be undone.")) {
+                vscode.postMessage({ command: "clearLogs" });
+            }
+        });
+    })();
 </script>
 </body>
 </html>`;
