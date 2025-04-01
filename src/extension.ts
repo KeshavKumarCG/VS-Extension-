@@ -156,16 +156,27 @@ async function runBuildProcess() {
         const handleOutput = (data: Buffer) => {
             const text = data.toString();
             buildOutput += text;
-
+        
             if (outputTimer) {
                 clearTimeout(outputTimer);
             }
-
+        
             outputTimer = setTimeout(() => {
                 if (buildTerminal && !processExited) {
                     try {
+                        const isWindows = process.platform === 'win32';
                         const sanitized = text.replace(/[^\x20-\x7E\r\n]/g, '');
-                        buildTerminal.sendText(`echo "${sanitized.replace(/"/g, '\\"')}"`, true);
+                        
+                        if (isWindows) {
+                            const lines = sanitized.split(/\r?\n/);
+                            for (const line of lines) {
+                                if (line.trim()) {
+                                    buildTerminal.sendText(line, true);
+                                }
+                            }
+                        } else {
+                            buildTerminal.sendText(`echo "${sanitized.replace(/"/g, '\\"')}"`, true);
+                        }
                     } catch (error) {
                         console.error('Error sending output to terminal:', error);
                     }
