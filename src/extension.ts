@@ -4,8 +4,8 @@ import * as path from 'path';
 import { spawn, exec } from 'child_process';
 
 
-const MAX_LOG_ENTRIES = 1000; 
-const MAX_ERROR_LENGTH = 5000; 
+const MAX_LOG_ENTRIES = 1000;
+const MAX_ERROR_LENGTH = 5000;
 
 let workspacePath: string;
 let logFilePath: string;
