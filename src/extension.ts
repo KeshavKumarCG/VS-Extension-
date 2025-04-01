@@ -3,9 +3,9 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { spawn, exec } from 'child_process';
 
-// Constants for configuration
-const MAX_LOG_ENTRIES = 1000; // Prevent log files from growing indefinitely
-const MAX_ERROR_LENGTH = 5000; // Truncate very long error messages
+
+const MAX_LOG_ENTRIES = 1000; 
+const MAX_ERROR_LENGTH = 5000; 
 
 let workspacePath: string;
 let logFilePath: string;
