@@ -38,13 +38,13 @@
       {
         "command": "build-logger.trackBuilds",
         "key": "ctrl+shift+alt+b",
-        "mac": "cmd+shift+alt+b",
+        "macos": "cmd+shift+alt+b",
         "when": "editorTextFocus"
       },
       {
         "command": "build-logger.showDashboard",
         "key": "ctrl+shift+alt+d",
-        "mac": "cmd+shift+alt+d",
+        "macos": "cmd+shift+alt+d",
         "when": "editorTextFocus"
       }
     ],
