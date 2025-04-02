@@ -413,10 +413,10 @@ function showBuildDashboard() {
                             break;
                         case "clearLogs":
                             const success = await clearLogs();
-                            if (success) {
-                                // Refresh the dashboard after clearing logs
-                                loadAndDisplayLogs(panel);
-                            }
+                            panel.webview.postMessage({ 
+                                command: "clearLogs", 
+                                success: success 
+                            });
                             break;
                         default:
                             console.warn(`Unknown command received: ${message.command}`);
@@ -678,6 +678,18 @@ function generateDashboardHtml(logs: any[]): string {
         document.getElementById("clearLogs").addEventListener("click", () => {
             if (confirm("Are you sure you want to clear all logs? This cannot be undone.")) {
                 vscode.postMessage({ command: "clearLogs" });
+                
+                // Add message listener for the response
+                window.addEventListener('message', event => {
+                    if (event.data.command === 'clearLogs') {
+                        if (event.data.success) {
+                            // Refresh the page to show empty logs
+                            location.reload();
+                        } else {
+                            alert('Failed to clear logs');
+                        }
+                    }
+                });
             }
         });
     })();
