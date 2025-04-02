@@ -34,16 +34,22 @@
         "category": "Build Logger"
       }
     ],
+    "activationEvents": [
+      "onCommand:build-logger.trackBuilds",
+      "onCommand:build-logger.showDashboard",
+      "onCommand:build-logger.exportLogs",
+      "onStartupFinished"
+    ],
     "keybindings": [
       {
         "command": "build-logger.trackBuilds",
-        "key": "ctrl+shift+alt+b",
-        "macos": "cmd+shift+alt+b"
+        "key": "ctrl+k ctrl+b",
+        "macos": "ctrl+k ctrl+b"
       },
       {
         "command": "build-logger.showDashboard",
-        "key": "ctrl+shift+alt+d",
-        "macos": "cmd+shift+alt+d"
+        "key": "ctrl+k ctrl+d",
+        "macos": "ctrl+k ctrl+d"
       }
     ],
     "configuration": {
