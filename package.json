@@ -43,13 +43,13 @@
     "keybindings": [
       {
         "command": "build-logger.trackBuilds",
-        "key": "ctrl+k ctrl+b",
-        "macos": "ctrl+k ctrl+b"
+        "key": "ctrl+alt+b",
+        "macos": "ctrl+alt+b"
       },
       {
         "command": "build-logger.showDashboard",
-        "key": "ctrl+k ctrl+d",
-        "macos": "ctrl+k ctrl+d"
+        "key": "ctrl+alt+d",
+        "macos": "ctrl+alt+d"
       }
     ],
     "configuration": {
