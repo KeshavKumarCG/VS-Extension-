@@ -36,9 +36,10 @@ export function activate(context: vscode.ExtensionContext) {
     ensureLogDirectoryExists();
 
     // Register commands
+    // In the activate function, change the command registration to:
     context.subscriptions.push(
         vscode.commands.registerCommand('build-logger.trackBuilds', trackBuilds),
-        vscode.commands.registerCommand('build-logger.showDashboard', showBuildDashboard),
+        vscode.commands.registerCommand('build-logger.showDashboard', () => showBuildDashboard(context)),
         vscode.commands.registerCommand('build-logger.exportLogs', exportLogs)
     );
 }
@@ -156,17 +157,17 @@ async function runBuildProcess() {
         const handleOutput = (data: Buffer) => {
             const text = data.toString();
             buildOutput += text;
-        
+
             if (outputTimer) {
                 clearTimeout(outputTimer);
             }
-        
+
             outputTimer = setTimeout(() => {
                 if (buildTerminal && !processExited) {
                     try {
                         const isWindows = process.platform === 'win32';
                         const sanitized = text.replace(/[^\x20-\x7E\r\n]/g, '');
-                        
+
                         if (isWindows) {
                             const lines = sanitized.split(/\r?\n/);
                             for (const line of lines) {
@@ -390,7 +391,7 @@ async function saveLog(logEntry: any) {
     }
 }
 
-function showBuildDashboard() {
+function showBuildDashboard(context: vscode.ExtensionContext) {
     try {
         const panel = vscode.window.createWebviewPanel(
             'buildLoggerDashboard',
@@ -402,7 +403,16 @@ function showBuildDashboard() {
             }
         );
 
-        loadAndDisplayLogs(panel);
+        // Store the panel reference to refresh it later
+        const refreshDashboard = () => {
+            loadAndDisplayLogs(panel);
+        };
+
+        // Initial load
+        refreshDashboard();
+
+        // Add panel to subscriptions so it gets disposed when extension deactivates
+        context.subscriptions.push(panel);
 
         panel.webview.onDidReceiveMessage(
             async (message) => {
@@ -413,10 +423,9 @@ function showBuildDashboard() {
                             break;
                         case "clearLogs":
                             const success = await clearLogs();
-                            panel.webview.postMessage({ 
-                                command: "clearLogs", 
-                                success: success 
-                            });
+                            if (success) {
+                                refreshDashboard(); // Refresh the panel directly
+                            }
                             break;
                         default:
                             console.warn(`Unknown command received: ${message.command}`);
@@ -428,7 +437,7 @@ function showBuildDashboard() {
                 }
             },
             undefined,
-            []
+            context.subscriptions // Now this will work correctly
         );
     } catch (error) {
         vscode.window.showErrorMessage(
@@ -669,6 +678,7 @@ function generateDashboardHtml(logs: any[]): string {
             <button id="clearLogs">Clear All Logs</button>
         </div>
     </div>
+
 <script>
     (function() {
         const vscode = acquireVsCodeApi();
@@ -678,22 +688,11 @@ function generateDashboardHtml(logs: any[]): string {
         document.getElementById("clearLogs").addEventListener("click", () => {
             if (confirm("Are you sure you want to clear all logs? This cannot be undone.")) {
                 vscode.postMessage({ command: "clearLogs" });
-                
-                // Add message listener for the response
-                window.addEventListener('message', event => {
-                    if (event.data.command === 'clearLogs') {
-                        if (event.data.success) {
-                            // Refresh the page to show empty logs
-                            location.reload();
-                        } else {
-                            alert('Failed to clear logs');
-                        }
-                    }
-                });
             }
         });
     })();
 </script>
+
 </body>
 </html>`;
 }
@@ -753,10 +752,15 @@ async function exportLogs() {
 
 async function clearLogs(): Promise<boolean> {
     try {
-        await fs.promises.writeFile(logFilePath, JSON.stringify([], null, 2));
+
+        const tempPath = logFilePath + '.tmp';
+        await fs.promises.writeFile(tempPath, JSON.stringify([], null, 2));
+        await fs.promises.rename(tempPath, logFilePath);
+
         vscode.window.showInformationMessage('Build logs cleared successfully');
         return true;
     } catch (err) {
+        console.error('Error clearing logs:', err);
         const message = err instanceof Error ? err.message : String(err);
         vscode.window.showErrorMessage(`Failed to clear logs: ${message}`);
         return false;
@@ -764,7 +768,6 @@ async function clearLogs(): Promise<boolean> {
 }
 
 function normalizePath(pathString: string): string {
-    // Convert to forward slashes and remove duplicate slashes
     return pathString.replace(/\\/g, '/').replace(/\/+/g, '/');
 }
 
