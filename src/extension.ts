@@ -424,7 +424,7 @@ function showBuildDashboard(context: vscode.ExtensionContext) {
                         case "clearLogs":
                             const success = await clearLogs();
                             if (success) {
-                                refreshDashboard(); // Refresh the panel directly
+                                loadAndDisplayLogs(panel);
                             }
                             break;
                         default:
@@ -437,7 +437,7 @@ function showBuildDashboard(context: vscode.ExtensionContext) {
                 }
             },
             undefined,
-            context.subscriptions // Now this will work correctly
+            context.subscriptions
         );
     } catch (error) {
         vscode.window.showErrorMessage(
@@ -752,6 +752,10 @@ async function exportLogs() {
 
 async function clearLogs(): Promise<boolean> {
     try {
+        const logDir = path.dirname(logFilePath);
+        if (!fs.existsSync(logDir)) {
+            fs.mkdirSync(logDir, { recursive: true });
+        }
 
         const tempPath = logFilePath + '.tmp';
         await fs.promises.writeFile(tempPath, JSON.stringify([], null, 2));
@@ -766,7 +770,6 @@ async function clearLogs(): Promise<boolean> {
         return false;
     }
 }
-
 function normalizePath(pathString: string): string {
     return pathString.replace(/\\/g, '/').replace(/\/+/g, '/');
 }
