@@ -2,17 +2,18 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import { spawn, exec } from 'child_process';
-
+import { OllamaService } from './ollamaService';
 
 const MAX_LOG_ENTRIES = 1000;
 const MAX_ERROR_LENGTH = 5000;
+let ollamaService: OllamaService;
 
 let workspacePath: string;
 let logFilePath: string;
 let buildTerminal: vscode.Terminal | undefined;
 
 export function activate(context: vscode.ExtensionContext) {
-
+    ollamaService = new OllamaService(context);
     workspacePath = getCorrectWorkspacePath();
 
     if (!fs.existsSync(path.join(workspacePath, 'package.json'))) {
@@ -40,8 +41,99 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(
         vscode.commands.registerCommand('build-logger.trackBuilds', trackBuilds),
         vscode.commands.registerCommand('build-logger.showDashboard', () => showBuildDashboard(context)),
-        vscode.commands.registerCommand('build-logger.exportLogs', exportLogs)
+        vscode.commands.registerCommand('build-logger.exportLogs', exportLogs),
+        vscode.commands.registerCommand('build-logger.analyzeWithAI', analyzeBuildWithAI)
     );
+}
+
+async function analyzeBuildWithAI() {
+    try {
+
+        const aiAnalysisEnabled = vscode.workspace.getConfiguration('build-logger').get<boolean>('enableAIAnalysis', false);
+
+        if (!aiAnalysisEnabled) {
+            vscode.window.showErrorMessage(
+                'AI analysis failed: Ollama integration is disabled in settings',
+                'Open Settings'
+            ).then(selection => {
+                if (selection === 'Open Settings') {
+                    vscode.commands.executeCommand('workbench.action.openSettings', 'build-logger.enableAIAnalysis');
+                }
+            });
+            return;
+        }
+
+        if (!fs.existsSync(logFilePath)) {
+            vscode.window.showWarningMessage('No build logs available for analysis');
+            return;
+        }
+
+        const logs = JSON.parse(fs.readFileSync(logFilePath, 'utf8'));
+        if (!logs.length) {
+            vscode.window.showWarningMessage('No build failures logged');
+            return;
+        }
+
+        // Check if Ollama is available
+          const isAvailable = await ollamaService.checkOllamaAvailable();
+        if (!isAvailable) {
+            vscode.window.showErrorMessage(
+                'Ollama is not running. Please install and start Ollama first.',
+                'Open Ollama Website'
+            ).then(selection => {
+                if (selection === 'Open Ollama Website') {
+                    vscode.env.openExternal(vscode.Uri.parse('https://ollama.ai'));
+                }
+            });
+            return;
+        }
+
+        // Let user select which failure to analyze
+        const items: { label: string; description: string; detail: string; log: any }[] = logs.map((log: any, index: number) => ({
+            label: `${log.timestamp} - ${log.command}`,
+            description: `Exit code: ${log.exitCode}`,
+            detail: log.error.substring(0, 100) + (log.error.length > 100 ? '...' : ''),
+            log
+        }));
+
+        const selected: { label: string; description: string; detail: string; log: any } | undefined = await vscode.window.showQuickPick(items, {
+            placeHolder: 'Select a build failure to analyze',
+            matchOnDescription: true,
+            matchOnDetail: true
+        });
+
+        if (!selected) {
+            return;
+        }
+
+        // Show progress while analyzing
+        await vscode.window.withProgress({
+            location: vscode.ProgressLocation.Notification,
+            title: "Analyzing build failure with AI",
+            cancellable: false
+        }, async () => {
+            const analysis = await ollamaService.analyzeBuildFailure(selected.log.error);
+
+            // Show results in a new document
+            if (selected && selected.log) {
+                const doc = await vscode.workspace.openTextDocument({
+                    content: `# Build Failure Analysis\n\n` +
+                        `**Timestamp:** ${selected.log.timestamp}\n` +
+                        `**Command:** ${selected.log.command}\n` +
+                        `**Exit Code:** ${selected.log.exitCode}\n\n` +
+                        `## Error Analysis\n${analysis}`,
+                    language: 'markdown'
+                });
+                await vscode.window.showTextDocument(doc);
+            }
+
+        });
+
+    } catch (error) {
+        vscode.window.showErrorMessage(
+            `AI analysis failed: ${error instanceof Error ? error.message : String(error)}`
+        );
+    }
 }
 
 function getCorrectWorkspacePath(): string {
@@ -421,6 +513,13 @@ function showBuildDashboard(context: vscode.ExtensionContext) {
                         case "exportLogs":
                             await exportLogs();
                             break;
+                        case "analyzeError":
+                            const logs = JSON.parse(fs.readFileSync(logFilePath, 'utf8'));
+                            const logToAnalyze = logs.find((log: { error: string }) => log.error === message.error);
+                            if (logToAnalyze) {
+                                await analyzeBuildWithAI();
+                            }
+                            break;
                         case "clearLogs":
                             const success = await clearLogs();
                             if (success) {
@@ -445,6 +544,8 @@ function showBuildDashboard(context: vscode.ExtensionContext) {
         );
     }
 }
+
+
 
 async function loadAndDisplayLogs(panel: vscode.WebviewPanel) {
     try {
@@ -672,25 +773,53 @@ function generateDashboardHtml(logs: any[]): string {
             </div>
         </div>
         <h3>Most Common Errors (Top 20)</h3>
-        <ul>${errorList || "No errors logged yet."}</ul>
+       <ul>
+  ${logs.map(log => `
+    <li>
+        <strong>${log.message}</strong>
+        <details class="error-details">
+            <summary>Details</summary>
+            ${escapeHtml(log.error)}
+        </details>
+        <button class="analyze-btn" style= "margin-top:5px" data-error="${escapeHtml(JSON.stringify(log.error))}">Analyze with AI</button>
+        <div class="ai-response" style="margin-top: 10px;"></div>
+    </li>
+  `).join('') || "<li>No errors logged yet.</li>"}
+</ul>
+
         <div class="button-group">
             <button id="exportLogs">Export Logs</button>
             <button id="clearLogs">Clear All Logs</button>
         </div>
     </div>
-
+    
 <script>
-    (function() {
-        const vscode = acquireVsCodeApi();
-        document.getElementById("exportLogs").addEventListener("click", () => {
-            vscode.postMessage({ command: "exportLogs" });
+(function() {
+    const vscode = acquireVsCodeApi();
+
+    document.getElementById("exportLogs").addEventListener("click", () => {
+        vscode.postMessage({ command: "exportLogs" });
+    });
+
+    document.getElementById("clearLogs").addEventListener("click", () => {
+        if (confirm("Are you sure you want to clear all logs? This cannot be undone.")) {
+            vscode.postMessage({ command: "clearLogs" });
+        }
+    });
+
+    document.querySelectorAll(".analyze-btn").forEach(btn => {
+        btn.addEventListener("click", () => {
+            const error = JSON.parse(btn.dataset.error);
+            const responseDiv = btn.nextElementSibling;
+
+            vscode.postMessage({
+                command: "analyzeError",
+                error: error
+            });
+            responseDiv.innerHTML = "Analyzing error with AI..."
         });
-        document.getElementById("clearLogs").addEventListener("click", () => {
-            if (confirm("Are you sure you want to clear all logs? This cannot be undone.")) {
-                vscode.postMessage({ command: "clearLogs" });
-            }
-        });
-    })();
+    });
+})();
 </script>
 
 </body>
