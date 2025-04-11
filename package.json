@@ -64,6 +64,11 @@
           "type": "string",
           "default": "build_logs.json",
           "description": "Relative path for storing build logs"
+        },
+        "build-logger.geminiApiKey": {
+          "type": "string",
+          "default": "",
+          "description": "Google Gemini API key for AI analysis features"
         }
       }
     }
