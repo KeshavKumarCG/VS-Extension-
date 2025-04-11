@@ -2,10 +2,12 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import { spawn, exec } from 'child_process';
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 
 const MAX_LOG_ENTRIES = 1000;
 const MAX_ERROR_LENGTH = 5000;
+const apiKey = 'AIzaSyAxlupK8tH6tREscjTSBquQflJ0QSGCC4I';
 
 let workspacePath: string;
 let logFilePath: string;
@@ -39,9 +41,113 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(
         vscode.commands.registerCommand('build-logger.trackBuilds', trackBuilds),
         vscode.commands.registerCommand('build-logger.showDashboard', showBuildDashboard),
-        vscode.commands.registerCommand('build-logger.exportLogs', exportLogs)
+        vscode.commands.registerCommand('build-logger.exportLogs', exportLogs),
+        vscode.commands.registerCommand('build-logger.analyzeWithAI', analyzeErrorWithAI)
     );
 }
+
+
+async function analyzeErrorWithAI(errorContent?: string) {
+    try {
+        // Get API key from configuration
+        const apiKey = vscode.workspace.getConfiguration('build-logger').get<string>('geminiApiKey');
+        if (!apiKey) {
+            vscode.window.showErrorMessage('Google Gemini API key not configured. Please set it in settings.');
+            vscode.commands.executeCommand('workbench.action.openSettings', 'build-logger.geminiApiKey');
+            return;
+        }
+
+        // If no error content provided, try to get it from active selection
+        if (!errorContent) {
+            const editor = vscode.window.activeTextEditor;
+            if (editor) {
+                const selection = editor.selection;
+                errorContent = editor.document.getText(selection);
+            }
+        }
+
+        // If still no content, prompt user
+        if (!errorContent) {
+            errorContent = await vscode.window.showInputBox({
+                prompt: 'Enter the error message to analyze',
+                placeHolder: 'Paste the error message here...'
+            });
+        }
+
+        if (!errorContent) {
+            return; // User cancelled
+        }
+
+        // Show progress
+        const progressOptions = {
+            location: vscode.ProgressLocation.Notification,
+            title: "Analyzing error with Gemini AI...",
+            cancellable: false
+        };
+
+        const analysis = await vscode.window.withProgress(progressOptions, async () => {
+            return await getAIErrorAnalysis(apiKey, errorContent!);
+        });
+
+        // Show results in a new document
+        const doc = await vscode.workspace.openTextDocument({
+            content: `# Error Analysis\n\n## Original Error:\n\`\`\`\n${errorContent}\n\`\`\`\n\n## AI Analysis:\n${analysis}`,
+            language: 'markdown'
+        });
+        await vscode.window.showTextDocument(doc);
+
+    } catch (error) {
+        console.error('Error in analyzeErrorWithAI:', error);
+        vscode.window.showErrorMessage(
+            `Failed to analyze error: ${error instanceof Error ? error.message : String(error)}`
+        );
+    }
+}
+
+async function getAIErrorAnalysis(apiKey: string, errorContent: string): Promise<string> {
+    try {
+        // Using fetch API for direct HTTP request to Gemini API
+        const response = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+            {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    contents: [{
+                        parts: [{
+                            text: `
+                            Analyze this build error and provide:
+                            1. A concise explanation of the likely cause
+                            2. Step-by-step solutions to fix it
+                            3. Any relevant best practices to prevent it
+                            
+                            Format the response in clear markdown with appropriate headings.
+                            
+                            Error:
+                            ${errorContent}
+                            `
+                        }]
+                    }]
+                })
+            }
+        );
+
+        if (!response.ok) {
+            const errorData = await response.text();
+            throw new Error(`Gemini API error (${response.status}): ${errorData}`);
+        }
+
+        const data = await response.json() as { candidates: { content: { parts: { text: string }[] } }[] };
+        return data.candidates[0].content.parts[0].text;
+    } catch (error) {
+        console.error('Gemini API error:', error);
+        throw new Error(`AI analysis failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+}
+
+
 
 function getCorrectWorkspacePath(): string {
 
@@ -156,17 +262,17 @@ async function runBuildProcess() {
         const handleOutput = (data: Buffer) => {
             const text = data.toString();
             buildOutput += text;
-        
+
             if (outputTimer) {
                 clearTimeout(outputTimer);
             }
-        
+
             outputTimer = setTimeout(() => {
                 if (buildTerminal && !processExited) {
                     try {
                         const isWindows = process.platform === 'win32';
                         const sanitized = text.replace(/[^\x20-\x7E\r\n]/g, '');
-                        
+
                         if (isWindows) {
                             const lines = sanitized.split(/\r?\n/);
                             for (const line of lines) {
@@ -390,6 +496,18 @@ async function saveLog(logEntry: any) {
     }
 }
 
+async function clearLogs(): Promise<boolean> {
+    try {
+        await fs.promises.writeFile(logFilePath, JSON.stringify([], null, 2));
+        vscode.window.showInformationMessage('Build logs cleared successfully');
+        return true;
+    } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        vscode.window.showErrorMessage(`Failed to clear logs: ${message}`);
+        return false;
+    }
+}
+
 function showBuildDashboard() {
     try {
         const panel = vscode.window.createWebviewPanel(
@@ -416,6 +534,13 @@ function showBuildDashboard() {
                             if (success) {
                                 // Refresh the dashboard after clearing logs
                                 loadAndDisplayLogs(panel);
+                            }
+                            break;
+
+                        case "analyzeError":
+                            // Handle the analyzeError command
+                            if (message.errorContent) {
+                                await analyzeErrorWithAI(message.errorContent);
                             }
                             break;
                         default:
@@ -503,12 +628,15 @@ function generateDashboardHtml(logs: any[]): string {
                 ? errorSig.substring(0, 200) + '...'
                 : errorSig);
             return `
-                <li>
-                    <details>
-                        <summary><strong>${count}x</strong> ${shortError}</summary>
-                        <pre class="error-details">${escapeHtml(fullError)}</pre>
-                    </details>
-                </li>
+            <li>
+                <details>
+                    <summary><strong>${count}x</strong> ${shortError}</summary>
+                    <pre class="error-details">${escapeHtml(fullError)}</pre>
+                    <button class="ai-analyze-btn" data-error="${escapeHtml(encodeURIComponent(fullError))}">
+                        Analyze with AI
+                    </button>
+                </details>
+            </li>
             `;
         })
         .join('');
@@ -624,6 +752,22 @@ function generateDashboardHtml(logs: any[]): string {
             cursor: pointer;
             font-weight: bold;
         }
+
+        .ai-analyze-btn {
+            margin-top: 10px;
+            padding: 6px 12px;
+            background: #4285f4;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9em;
+        }
+
+        .ai-analyze-btn:hover {
+            background: #3367d6;
+        }
+
         @media (prefers-color-scheme: dark) {
             body {
                 background-color: var(--background-dark);
@@ -671,16 +815,26 @@ function generateDashboardHtml(logs: any[]): string {
     </div>
 <script>
     (function() {
-        const vscode = acquireVsCodeApi();
-        document.getElementById("exportLogs").addEventListener("click", () => {
-            vscode.postMessage({ command: "exportLogs" });
-        });
-        document.getElementById("clearLogs").addEventListener("click", () => {
-            if (confirm("Are you sure you want to clear all logs? This cannot be undone.")) {
-                vscode.postMessage({ command: "clearLogs" });
-            }
-        });
-    })();
+            const vscode = acquireVsCodeApi();
+            document.getElementById("exportLogs").addEventListener("click", () => {
+                vscode.postMessage({ command: "exportLogs" });
+            });
+            document.getElementById("clearLogs").addEventListener("click", () => {
+                if (confirm("Are you sure you want to clear all logs? This cannot be undone.")) {
+                    vscode.postMessage({ command: "clearLogs" });
+                }
+            });
+    
+            document.querySelectorAll(".ai-analyze-btn").forEach(btn => {
+                btn.addEventListener("click", (e) => {
+                    const errorContent = decodeURIComponent(btn.dataset.error || "");
+                    vscode.postMessage({ 
+                        command: "analyzeError", 
+                        errorContent: errorContent 
+                    });
+                });
+            });
+        })();
 </script>
 </body>
 </html>`;
@@ -739,17 +893,20 @@ async function exportLogs() {
     }
 }
 
-async function clearLogs(): Promise<boolean> {
-    try {
-        await fs.promises.writeFile(logFilePath, JSON.stringify([], null, 2));
-        vscode.window.showInformationMessage('Build logs cleared successfully');
-        return true;
-    } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        vscode.window.showErrorMessage(`Failed to clear logs: ${message}`);
-        return false;
-    }
+
+async function fetchWithTimeout(url: string, options: any, timeout = 10000): Promise<Response> {
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), timeout);
+    
+    const response = await fetch(url, {
+        ...options,
+        signal: controller.signal
+    });
+    
+    clearTimeout(id);
+    return response;
 }
+
 
 function normalizePath(pathString: string): string {
     // Convert to forward slashes and remove duplicate slashes
