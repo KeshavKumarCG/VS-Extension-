@@ -38,6 +38,7 @@
       "onCommand:build-logger.trackBuilds",
       "onCommand:build-logger.showDashboard",
       "onCommand:build-logger.exportLogs",
+      "onCommand:build-logger.analyzeWithAI",
       "onStartupFinished"
     ],
     "keybindings": [
