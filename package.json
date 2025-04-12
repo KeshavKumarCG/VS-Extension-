@@ -34,10 +34,20 @@
         "category": "Build Logger"
       }
     ],
+    "menus": {
+      "statusBar/item": [
+        {
+          "command": "build-logger.showDashboard",
+          "when": "false",
+          "group": "navigation"
+        }
+      ]
+    },
     "activationEvents": [
       "onCommand:build-logger.trackBuilds",
       "onCommand:build-logger.showDashboard",
       "onCommand:build-logger.exportLogs",
+      "onCommand:build-logger.analyzeWithAI",
       "onStartupFinished"
     ],
     "keybindings": [
@@ -64,6 +74,11 @@
           "type": "string",
           "default": "build_logs.json",
           "description": "Relative path for storing build logs"
+        },
+        "build-logger.geminiApiKey": {
+          "type": "string",
+          "default": "",
+          "description": "Google Gemini API key for AI analysis features"
         },
         "build-logger.enableAIAnalysis": {
           "type": "boolean",
@@ -124,8 +139,6 @@
     "typescript": "^5.8.2"
   },
   "dependencies": {
-    "axios": "^1.8.4",
-    "firebase": "^11.6.0",
-    "ollama": "^0.5.14"
+    "axios": "^1.8.4"
   }
 }
