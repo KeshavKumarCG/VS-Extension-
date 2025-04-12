@@ -38,6 +38,7 @@ A Visual Studio Code extension that tracks build failures, collects contextual i
 2. Open command palette (`Ctrl+Shift+P`)
 3. Select **"Track Builds"**
 4. Watch real-time build output in dedicated terminal
+5. Power BI integration via firebase 
 
 ### View Dashboard
 1. After at least one failed build:
