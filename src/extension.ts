@@ -15,6 +15,16 @@ let buildTerminal: vscode.Terminal | undefined;
 
 export function activate(context: vscode.ExtensionContext) {
 
+    const statusBarBtn = vscode.window.createStatusBarItem(
+        vscode.StatusBarAlignment.Right, 
+        100
+    );
+    statusBarBtn.command = "build-logger.showDashboard";
+    statusBarBtn.text = "$(graph) Build Logger"; 
+    statusBarBtn.tooltip = "Open Build Logger Dashboard";
+    statusBarBtn.show();
+    context.subscriptions.push(statusBarBtn);
+
     workspacePath = getCorrectWorkspacePath();
 
     if (!fs.existsSync(path.join(workspacePath, 'package.json'))) {
