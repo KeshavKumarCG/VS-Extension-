@@ -12,6 +12,16 @@ let logFilePath: string;
 let buildTerminal: vscode.Terminal | undefined;
 
 export function activate(context: vscode.ExtensionContext) {
+    
+    const statusBarBtn = vscode.window.createStatusBarItem(
+        vscode.StatusBarAlignment.Right, 
+        100
+    );
+    statusBarBtn.command = "build-logger.showDashboard";
+    statusBarBtn.text = "$(graph) Build Logger"; 
+    statusBarBtn.tooltip = "Open Build Logger Dashboard";
+    statusBarBtn.show();
+    context.subscriptions.push(statusBarBtn);
 
     workspacePath = getCorrectWorkspacePath();
 
@@ -41,6 +51,8 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.commands.registerCommand('build-logger.showDashboard', showBuildDashboard),
         vscode.commands.registerCommand('build-logger.exportLogs', exportLogs)
     );
+
+
 }
 
 function getCorrectWorkspacePath(): string {
@@ -537,7 +549,7 @@ function generateDashboardHtml(logs: any[]): string {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Build Failure Dashboard</title>
+    <title>Build Logger Dashboard</title>
     <style>
         :root {
             --primary-color: #007acc;
@@ -641,7 +653,7 @@ function generateDashboardHtml(logs: any[]): string {
 </head>
 <body>
     <div class="container">
-        <h2>Build Failure Dashboard</h2>
+        <h2>Build Logger Dashboard</h2>
         <div class="stats">
             <p><strong>Total Failed Builds:</strong> ${failedBuilds}</p>
             ${failedBuilds > MAX_LOG_ENTRIES

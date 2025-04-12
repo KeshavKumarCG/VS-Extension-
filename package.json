@@ -10,7 +10,7 @@
   "categories": [
     "Other"
   ],
-  "icon": "icon.png",
+  "icon": "media/icon.png",
   "main": "./dist/extension.js",
   "repository": {
     "type": "git",
@@ -34,10 +34,18 @@
         "category": "Build Logger"
       }
     ],
+    "menus": {
+      "statusBar/item": [
+        {
+          "command": "build-logger.showDashboard",
+          "when": "false",
+          "group": "navigation"
+        }
+      ]
+    },
     "activationEvents": [
       "onCommand:build-logger.trackBuilds",
       "onCommand:build-logger.showDashboard",
-      "onCommand:build-logger.exportLogs",
       "onStartupFinished"
     ],
     "keybindings": [
