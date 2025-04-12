@@ -1,6 +1,4 @@
-# Build Logger 🛠️
-
-![Avatar](https://avatars.githubusercontent.com/u/21338130?s=200&v=4)
+# Build Logger 🛠️📊
 
 A Visual Studio Code extension that tracks build failures, collects contextual information, and provides insightful analytics through an interactive dashboard.
 
