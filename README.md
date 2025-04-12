@@ -1,11 +1,7 @@
 # Build Logger 🛠️📊
 
-[![VS Code Marketplace](https://img.shields.io/visual-studio-marketplace/v/KeshavKumar.build-logger?color=blue&logo=visual-studio-code)](https://marketplace.visualstudio.com/items?itemName=KeshavKumar.build-logger)
-[![GitHub License](https://img.shields.io/github/license/KeshavKumarCG/VS-Extension-?color=green)](https://github.com/KeshavKumarCG/VS-Extension-/blob/main/LICENSE)
-
 A Visual Studio Code extension that tracks build failures, collects contextual information, and provides insightful analytics through an interactive dashboard.
 
-![Build Dashboard Screenshot](https://via.placeholder.com/800x500.png?text=Build+Dashboard+Preview) 
 
 
 ## Features 🚀
