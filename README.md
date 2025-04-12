@@ -98,9 +98,6 @@ We welcome contributions! Please follow these steps:
 4. Push to branch
 5. Open a Pull Request
 
-## License 📄
-
-This project is licensed under the [MIT License](LICENSE).
 
 ---
 
