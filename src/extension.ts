@@ -1,50 +1,50 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
-import { spawn, exec } from 'child_process';
+import { spawn, exec, ExecException } from 'child_process';
 
-
+// Constants
 const MAX_LOG_ENTRIES = 1000;
 const MAX_ERROR_LENGTH = 5000;
+const SIGNIFICANT_CHANGE_THRESHOLD = 0.1; // 10% of code changes are significant
 
+// Global variables
 let workspacePath: string;
 let logFilePath: string;
 let buildTerminal: vscode.Terminal | undefined;
+let statusBarItem: vscode.StatusBarItem;
+let commitHookDisposable: vscode.Disposable | undefined;
 
-export function activate(context: vscode.ExtensionContext) {
+// Interfaces
+interface FileChange {
+    file: string;
+    additions: number;
+    deletions: number;
+}
 
-    workspacePath = getCorrectWorkspacePath();
+interface LogEntry {
+    timestamp: string;
+    error: string;
+    branch: string;
+    developer: string;
+    exitCode: number | null;
+    command: string;
+    workingDirectory: string;
+    buildTime: number;
+}
 
-    if (!fs.existsSync(path.join(workspacePath, 'package.json'))) {
-        vscode.window.showWarningMessage(
-            'Build Logger: No package.json found in current workspace. Some features may not work properly.',
-            'Open Project Folder'
-        ).then(selection => {
-            if (selection === 'Open Project Folder') {
-                vscode.commands.executeCommand('vscode.openFolder');
-            }
-        });
-    }
-
-    // Get log file path from configuration or use default
-    const configLogPath = vscode.workspace.getConfiguration('build-logger').get<string>('logFilePath');
-    logFilePath = configLogPath
-        ? path.resolve(workspacePath, configLogPath)
-        : path.join(workspacePath, 'build_logs.json');
-
-    // Ensure log directory exists
-    ensureLogDirectoryExists();
-
-    // Register commands
-    context.subscriptions.push(
-        vscode.commands.registerCommand('build-logger.trackBuilds', trackBuilds),
-        vscode.commands.registerCommand('build-logger.showDashboard', showBuildDashboard),
-        vscode.commands.registerCommand('build-logger.exportLogs', exportLogs)
-    );
+// Helper functions
+function updateStatusBarItem(): void {
+    statusBarItem.text = commitHookDisposable 
+        ? '$(check) Build-on-Commit' 
+        : '$(circle-slash) Build-on-Commit';
+    statusBarItem.tooltip = commitHookDisposable
+        ? 'Commit-triggered builds are enabled'
+        : 'Commit-triggered builds are disabled';
+    statusBarItem.show();
 }
 
 function getCorrectWorkspacePath(): string {
-
     if (vscode.workspace.workspaceFolders?.length) {
         return vscode.workspace.workspaceFolders[0].uri.fsPath;
     }
@@ -63,16 +63,62 @@ function getCorrectWorkspacePath(): string {
     return cwd;
 }
 
-function ensureLogDirectoryExists() {
+function ensureLogDirectoryExists(): void {
     const logDir = path.dirname(logFilePath);
     if (!fs.existsSync(logDir)) {
         fs.mkdirSync(logDir, { recursive: true });
     }
 }
 
-async function trackBuilds() {
+// Main functions
+export function activate(context: vscode.ExtensionContext): void {
+    workspacePath = getCorrectWorkspacePath();
+    
+    // Create status bar item
+    statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
+    statusBarItem.command = 'build-logger.enableCommitHooks';
+    updateStatusBarItem();
+    
+    // Enable commit hooks if configured
+    if (vscode.workspace.getConfiguration('build-logger').get<boolean>('enableCommitHooks')) {
+        enableCommitHooks().catch(err => {
+            console.error('Failed to enable commit hooks:', err);
+        });
+    }
+
+    // Check for package.json
+    if (!fs.existsSync(path.join(workspacePath, 'package.json'))) {
+        vscode.window.showWarningMessage(
+            'Build Logger: No package.json found in current workspace. Some features may not work properly.', 
+            'Open Project Folder'
+        ).then(selection => {
+            if (selection === 'Open Project Folder') {
+                vscode.commands.executeCommand('vscode.openFolder');
+            }
+        });
+    }
+
+    // Initialize log file path
+    const configLogPath = vscode.workspace.getConfiguration('build-logger').get<string>('logFilePath');
+    logFilePath = configLogPath
+        ? path.resolve(workspacePath, configLogPath)
+        : path.join(workspacePath, 'build_logs.json');
+    
+    ensureLogDirectoryExists();
+    
+    // Register commands
+    context.subscriptions.push(
+        vscode.commands.registerCommand('build-logger.trackBuilds', trackBuilds), 
+        vscode.commands.registerCommand('build-logger.showDashboard', showBuildDashboard),
+        vscode.commands.registerCommand('build-logger.exportLogs', exportLogs),
+        vscode.commands.registerCommand('build-logger.enableCommitHooks', enableCommitHooks),
+        vscode.commands.registerCommand('build-logger.disableCommitHooks', disableCommitHooks),
+        statusBarItem
+    );
+}
+
+async function trackBuilds(): Promise<void> {
     try {
-        // Verify workspace path is valid
         workspacePath = getCorrectWorkspacePath();
         if (!fs.existsSync(workspacePath)) {
             throw new Error('Invalid workspace path. Please open a project folder first.');
@@ -85,14 +131,13 @@ async function trackBuilds() {
 
         vscode.window.showInformationMessage('Build Logger Activated - Tracking builds...');
 
-        // Initialize log file path (in case it changed)
+        // Initialize log file path
         const configLogPath = vscode.workspace.getConfiguration('build-logger').get<string>('logFilePath');
         logFilePath = configLogPath
             ? path.resolve(workspacePath, configLogPath)
             : path.join(workspacePath, 'build_logs.json');
 
         ensureLogDirectoryExists();
-
         await runBuildProcess();
     } catch (error) {
         console.error('Error in trackBuilds:', error);
@@ -106,6 +151,176 @@ async function trackBuilds() {
         });
     }
 }
+
+// Commit hook functions
+export function enableCommitHooks(): Promise<void> {
+    return new Promise(async (resolve) => {
+        if (commitHookDisposable) {
+            resolve();
+            return;
+        }
+
+        if (!await isGitRepository()) {
+            vscode.window.showErrorMessage('Commit hooks require a Git repository');
+            resolve();
+            return;
+        }
+
+        commitHookDisposable = vscode.commands.registerCommand('git.commit', async () => {
+            try {
+                const hasSignificantChanges = await checkForSignificantChanges();
+                if (!hasSignificantChanges) {
+                    vscode.window.showInformationMessage('No significant code changes detected. Skipping pre-commit build.');
+                    await vscode.commands.executeCommand('git.commit', '--quiet');
+                    return;
+                }
+
+                const shouldRunBuild = await vscode.window.showInformationMessage(
+                    'Significant code changes detected. Run build before commit?',
+                    { modal: true },
+                    'Yes', 'No'
+                );
+
+                if (shouldRunBuild === 'Yes') {
+                    const success = await runPreCommitBuild();
+                    if (!success) {
+                        vscode.window.showErrorMessage('Build failed! Please fix the issues before committing.');
+                        return;
+                    }
+                }
+
+                await vscode.commands.executeCommand('git.commit', '--quiet');
+            } catch (error) {
+                console.error('Error in commit hook:', error);
+                vscode.window.showErrorMessage(`Error in build check: ${error instanceof Error ? error.message : String(error)}`);
+            }
+        });
+
+        updateStatusBarItem();
+        resolve();
+    });
+}
+
+export function disableCommitHooks(): void {
+    if (commitHookDisposable) {
+        commitHookDisposable.dispose();
+        commitHookDisposable = undefined;
+        updateStatusBarItem();
+    }
+}
+
+async function isGitRepository(): Promise<boolean> {
+    try {
+        await executeCommand('git rev-parse --is-inside-work-tree');
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+async function checkForSignificantChanges(): Promise<boolean> {
+    try {
+        const diffOutput = await executeCommand('git diff --cached --numstat');
+        if (!diffOutput.trim()) return false;
+
+        const changes: FileChange[] = diffOutput.split('\n')
+            .filter(line => line.trim())
+            .map(line => {
+                const [additions, deletions, file] = line.split('\t');
+                return {
+                    file,
+                    additions: parseInt(additions) || 0,
+                    deletions: parseInt(deletions) || 0
+                };
+            });
+
+        const codeFiles = changes.filter(change => 
+            !change.file.endsWith('.md') && 
+            !change.file.endsWith('.txt') &&
+            !change.file.match(/\.(png|jpg|jpeg|gif|svg)$/i));
+
+        if (codeFiles.length === 0) return false;
+
+        const fullDiff = await executeCommand('git diff --cached -U0');
+        const significantLines = fullDiff.split('\n')
+            .filter(line => line.startsWith('+') && !line.startsWith('+++'))
+            .filter(line => {
+                const codeLine = line.substring(1).trim();
+                return codeLine.length > 0 &&
+                    !codeLine.startsWith('//') &&
+                    !codeLine.startsWith('/*') &&
+                    !codeLine.startsWith('*') &&
+                    !codeLine.startsWith('#');
+            }).length;
+
+        const totalChanges = codeFiles.reduce((sum, change) => sum + change.additions + change.deletions, 0);
+        const changeRatio = significantLines / Math.max(totalChanges, 1);
+
+        return changeRatio >= SIGNIFICANT_CHANGE_THRESHOLD;
+    } catch (error) {
+        console.error('Error checking for significant changes:', error);
+        return true;
+    }
+}
+
+async function runPreCommitBuild(): Promise<boolean> {
+    try {
+        const startTime = Date.now();
+        const buildCommand = getValidatedBuildCommand();
+
+        const result = await new Promise<boolean>((resolve) => {
+            const buildProcess = spawn(buildCommand, {
+                shell: true,
+                cwd: workspacePath,
+                stdio: 'pipe'
+            });
+
+            let output = '';
+
+            buildProcess.stdout.on('data', (data: Buffer) => output += data.toString());
+            buildProcess.stderr.on('data', (data: Buffer) => output += data.toString());
+
+            buildProcess.on('close', async (code: number | null) => {
+                if (code === 0) {
+                    resolve(true);
+                } else {
+                    const developer = await getDeveloperName().catch(() => 'pre-commit');
+
+                    const logEntry: LogEntry = {
+                        timestamp: new Date().toISOString(),
+                        error: output.length > MAX_ERROR_LENGTH
+                            ? output.substring(0, MAX_ERROR_LENGTH) + '... [truncated]'
+                            : output,
+                        branch: 'pre-commit',
+                        developer,
+                        exitCode: code,
+                        command: buildCommand,
+                        workingDirectory: workspacePath,
+                        buildTime: Date.now() - startTime
+                    };
+
+                    await saveLog(logEntry).catch(e => console.error('Error saving pre-commit log:', e));
+                    resolve(false);
+                }
+            });
+
+            buildProcess.on('error', (err: Error) => {
+                console.error('Pre-commit build error:', err);
+                resolve(false);
+            });
+        });
+
+        return result;
+    } catch (error) {
+        console.error('Error in pre-commit build:', error);
+        return false;
+    }
+}
+
+// ... [Rest of your functions with proper TypeScript typing]
+
+
+
 
 async function runBuildProcess() {
     try {
@@ -776,23 +991,17 @@ async function checkBuildTools(): Promise<boolean> {
     }
 }
 
-export function deactivate() {
-    try {
-        if (buildTerminal) {
-
-            try {
-                buildTerminal.sendText('exit', true);
-            } catch (error) {
-                console.error('Error sending exit command:', error);
-            }
-
-            try {
-                buildTerminal.dispose();
-            } catch (error) {
-                console.error('Error disposing terminal:', error);
-            }
+export function deactivate(): void {
+    if (commitHookDisposable) {
+        commitHookDisposable.dispose();
+    }
+    
+    if (buildTerminal) {
+        try {
+            buildTerminal.sendText('exit', true);
+            buildTerminal.dispose();
+        } catch (error) {
+            console.error('Error disposing terminal:', error);
         }
-    } catch (error) {
-        console.error('Error in deactivate:', error);
     }
 }

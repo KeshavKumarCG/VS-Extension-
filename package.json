@@ -33,6 +33,14 @@
         "command": "build-logger.exportLogs",
         "title": "Export Build Logs",
         "category": "Build Logger"
+      },
+      {
+        "command": "build-logger.enableCommitHooks",
+        "title": "Enable Commit-Triggered Builds"
+      },
+      {
+        "command": "build-logger.disableCommitHooks",
+        "title": "Disable Commit-Triggered Builds"
       }
     ],
     "activationEvents": [
@@ -53,21 +61,26 @@
         "macos": "ctrl+alt+d"
       }
     ],
-    "configuration": {
-      "title": "Build Logger",
-      "properties": {
-        "build-logger.buildCommand": {
-          "type": "string",
-          "default": "npm run build",
-          "description": "The build command to execute"
-        },
-        "build-logger.logFilePath": {
-          "type": "string",
-          "default": "build_logs.json",
-          "description": "Relative path for storing build logs"
-        }
-      }
+   "configuration": {
+  "title": "Build Logger",
+  "properties": {
+    "build-logger.buildCommand": {
+      "type": "string",
+      "default": "npm run build",
+      "description": "The build command to execute"
+    },
+    "build-logger.logFilePath": {
+      "type": "string",
+      "default": "build_logs.json",
+      "description": "Relative path for storing build logs"
+    },
+    "build-logger.enableCommitHooks": {
+      "type": "boolean",
+      "default": false,
+      "description": "Automatically enable commit-triggered builds"
     }
+  }
+}
   },
   "scripts": {
     "vscode:prepublish": "npm run package",
@@ -102,5 +115,10 @@
   },
   "dependencies": {
     "axios": "^1.8.4"
+  },
+  "enableCommitHooks": {
+    "type": "boolean",
+    "default": true,
+    "description": "Automatically run builds when committing significant changes"
   }
 }

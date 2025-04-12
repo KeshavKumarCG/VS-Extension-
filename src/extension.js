@@ -15,13 +15,23 @@ var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (
 }) : function(o, v) {
     o["default"] = v;
 });
-var __importStar = (this && this.__importStar) || function (mod) {
-    if (mod && mod.__esModule) return mod;
-    var result = {};
-    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
-    __setModuleDefault(result, mod);
-    return result;
-};
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.activate = activate;
 exports.deactivate = deactivate;
@@ -31,11 +41,35 @@ const path = __importStar(require("path"));
 const child_process_1 = require("child_process");
 const MAX_LOG_ENTRIES = 1000;
 const MAX_ERROR_LENGTH = 5000;
+const SIGNIFICANT_CHANGE_THRESHOLD = 0.1; // 10% of code changes are significant
 let workspacePath;
 let logFilePath;
 let buildTerminal;
+// let statusBarItem: vscode.StatusBarItem;
+/**
+ * @type {vscode.StatusBarItem}
+ */
+let statusBarItem;
+
+function updateStatusBarItem() {
+    statusBarItem.text = commitHookDisposable 
+        ? '$(check) Build-on-Commit' 
+        : '$(circle-slash) Build-on-Commit';
+    statusBarItem.tooltip = commitHookDisposable
+        ? 'Commit-triggered builds are enabled'
+        : 'Commit-triggered builds are disabled';
+    statusBarItem.show();
+}
 function activate(context) {
     workspacePath = getCorrectWorkspacePath();
+    statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
+statusBarItem.command = 'build-logger.enableCommitHooks';
+updateStatusBarItem();
+    if (vscode.workspace.getConfiguration('build-logger').get('enableCommitHooks')) {
+        enableCommitHooks().catch(err => {
+            console.error('Failed to enable commit hooks:', err);
+        });
+    }
     if (!fs.existsSync(path.join(workspacePath, 'package.json'))) {
         vscode.window.showWarningMessage('Build Logger: No package.json found in current workspace. Some features may not work properly.', 'Open Project Folder').then(selection => {
             if (selection === 'Open Project Folder') {
@@ -50,8 +84,25 @@ function activate(context) {
         : path.join(workspacePath, 'build_logs.json');
     // Ensure log directory exists
     ensureLogDirectoryExists();
-    // Register commands
-    context.subscriptions.push(vscode.commands.registerCommand('build-logger.trackBuilds', trackBuilds), vscode.commands.registerCommand('build-logger.showDashboard', showBuildDashboard), vscode.commands.registerCommand('build-logger.exportLogs', exportLogs));
+    
+    context.subscriptions.push(
+        vscode.commands.registerCommand('build-logger.trackBuilds', trackBuilds), 
+        vscode.commands.registerCommand('build-logger.showDashboard', showBuildDashboard),
+        vscode.commands.registerCommand('build-logger.exportLogs', exportLogs),
+        // Add these new commands:
+        vscode.commands.registerCommand('build-logger.enableCommitHooks', enableCommitHooks),
+        vscode.commands.registerCommand('build-logger.disableCommitHooks', disableCommitHooks)
+    );
+}
+
+
+async function isGitRepository() {
+    try {
+        await executeCommand('git rev-parse --is-inside-work-tree');
+        return true;
+    } catch {
+        return false;
+    }
 }
 function getCorrectWorkspacePath() {
     if (vscode.workspace.workspaceFolders?.length) {
@@ -86,7 +137,9 @@ async function trackBuilds() {
         }
         vscode.window.showInformationMessage('Build Logger Activated - Tracking builds...');
         // Initialize log file path (in case it changed)
-        const configLogPath = vscode.workspace.getConfiguration('build-logger').get('logFilePath');
+        // const configLogPath = vscode.workspace.getConfiguration('build-logger').get('logFilePath');
+        // In your extension code
+vscode.workspace.getConfiguration('build-logger').get('enableCommitHooks')
         logFilePath = configLogPath
             ? path.resolve(workspacePath, configLogPath)
             : path.join(workspacePath, 'build_logs.json');
@@ -102,6 +155,148 @@ async function trackBuilds() {
         });
     }
 }
+// Done
+// let commitHookDisposable: vscode.Disposable | undefined;
+
+function enableCommitHooks() {
+    if (commitHookDisposable) return;
+    
+    if (! isGitRepository()) {
+        vscode.window.showErrorMessage('Commit hooks require a Git repository');
+        return;
+    }
+    
+    commitHookDisposable = vscode.commands.registerCommand('git.commit', async () => {
+        try {
+            const hasSignificantChanges = await checkForSignificantChanges();
+            if (!hasSignificantChanges) {
+                vscode.window.showInformationMessage('No significant code changes detected. Skipping pre-commit build.');
+                return vscode.commands.executeCommand('git.commit', '--quiet');
+            }
+
+            const shouldRunBuild = await vscode.window.showInformationMessage(
+                'Significant code changes detected. Run build before commit?',
+                { modal: true },
+                'Yes', 'No'
+            );
+
+            if (shouldRunBuild === 'Yes') {
+                const success = await runPreCommitBuild();
+                if (!success) {
+                    vscode.window.showErrorMessage('Build failed! Please fix the issues before committing.');
+                    return;
+                }
+            }
+            return vscode.commands.executeCommand('git.commit', '--quiet');
+        } catch (error) {
+            console.error('Error in commit hook:', error);
+            vscode.window.showErrorMessage(`Error in build check: ${error instanceof Error ? error.message : String(error)}`);
+        }
+    });
+}
+
+function disableCommitHooks() {
+    if (commitHookDisposable) {
+        commitHookDisposable.dispose();
+        commitHookDisposable = undefined;
+    }
+}
+async function checkForSignificantChanges() {
+    try {
+        const diffOutput = await executeCommand('git diff --cached --numstat');
+        if (!diffOutput.trim()) return false;
+
+        const changes = diffOutput.split('\n')
+            .filter(line => line.trim())
+            .map(line => {
+                const [additions, deletions, file] = line.split('\t');
+                return {
+                    file,
+                    additions: parseInt(additions) || 0,
+                    deletions: parseInt(deletions) || 0
+                };
+            });
+
+        const codeFiles = changes.filter(change => 
+            !change.file.endsWith('.md') && 
+            !change.file.endsWith('.txt') &&
+            !change.file.match(/\.(png|jpg|jpeg|gif|svg)$/i));
+
+        if (codeFiles.length === 0) return false;
+
+        const fullDiff = await executeCommand('git diff --cached -U0');
+        const significantLines = fullDiff.split('\n')
+            .filter(line => line.startsWith('+') && !line.startsWith('+++'))
+            .filter(line => {
+                const codeLine = line.substring(1).trim();
+                return codeLine.length > 0 && 
+                       !codeLine.startsWith('//') && 
+                       !codeLine.startsWith('/*') && 
+                       !codeLine.startsWith('*') && 
+                       !codeLine.startsWith('#');
+            }).length;
+
+        const totalChanges = codeFiles.reduce((sum, change) => sum + change.additions + change.deletions, 0);
+        const changeRatio = significantLines / Math.max(totalChanges, 1);
+        return changeRatio >= SIGNIFICANT_CHANGE_THRESHOLD;
+    } catch (error) {
+        console.error('Error checking for significant changes:', error);
+        return true;
+    }
+}
+
+
+
+async function runPreCommitBuild() {
+    try {
+        const startTime = Date.now();
+        const buildCommand = getValidatedBuildCommand();
+        
+        const result = await new Promise((resolve) => { // Removed <boolean> type
+            const buildProcess = (0, child_process_1.spawn)(buildCommand, {
+                shell: true,
+                cwd: workspacePath,
+                stdio: 'pipe'
+            });
+
+            let output = '';
+            buildProcess.stdout.on('data', (data) => output += data.toString());
+            buildProcess.stderr.on('data', (data) => output += data.toString());
+
+            buildProcess.on('close', async (code) => {
+                if (code === 0) {
+                    resolve(true);
+                } else {
+                    const developer = await getDeveloperName().catch(() => 'pre-commit');
+                    await saveLog({
+                        timestamp: new Date().toISOString(),
+                        error: output.length > MAX_ERROR_LENGTH 
+                            ? output.substring(0, MAX_ERROR_LENGTH) + '... [truncated]' 
+                            : output,
+                        branch: 'pre-commit',
+                        developer: developer,
+                        exitCode: code,
+                        command: buildCommand,
+                        workingDirectory: workspacePath,
+                        buildTime: Date.now() - startTime
+                    }).catch(e => console.error('Error saving pre-commit log:', e));
+                    resolve(false);
+                }
+            });
+
+            buildProcess.on('error', (err) => {
+                console.error('Pre-commit build error:', err);
+                resolve(false);
+            });
+        });
+
+        return result;
+    } catch (error) {
+        console.error('Error in pre-commit build:', error);
+        return false;
+    }
+}
+
 async function runBuildProcess() {
     try {
         // Validate workspace path again (in case it changed)
@@ -704,7 +899,11 @@ async function checkBuildTools() {
     }
 }
 function deactivate() {
+    if (commitHookDisposable) {
+        commitHookDisposable.dispose();
+    }
     try {
+
         if (buildTerminal) {
             try {
                 buildTerminal.sendText('exit', true);
