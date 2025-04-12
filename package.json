@@ -125,6 +125,7 @@
   },
   "dependencies": {
     "axios": "^1.8.4",
+    "firebase": "^11.6.0",
     "ollama": "^0.5.14"
   }
 }

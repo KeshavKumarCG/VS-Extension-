@@ -3,6 +3,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { spawn, exec } from 'child_process';
 import { OllamaService } from './ollamaService';
+import { uploadToFirebase } from './firebaseService';
+import { getGitRemoteUrl } from './utils/gitUtils'; 
 
 const MAX_LOG_ENTRIES = 1000;
 const MAX_ERROR_LENGTH = 5000;
@@ -290,10 +292,14 @@ async function runBuildProcess() {
                 if (code === 0) {
                     vscode.window.showInformationMessage("Build Successful ✅");
                 } else {
-                    const [branchName, developer] = await Promise.all([
+                    const [branchName, developer, repoUrl] = await Promise.all([
                         getGitBranch().catch(() => 'unknown'),
-                        getDeveloperName().catch(() => 'Unknown Developer')
-                    ]);
+                        getDeveloperName().catch(() => 'Unknown Developer'),
+                        getGitRemoteUrl(workspacePath).catch(() => 'unknown') // ✅ pass correct path
+                    ]);            
+                    console.log('Branch Name:', branchName);
+                    console.log('Developer Name:', developer);  
+                    console.log('Repository URL:', repoUrl);
 
                     await saveLog({
                         timestamp: new Date().toISOString(),
@@ -303,8 +309,22 @@ async function runBuildProcess() {
                         exitCode: code,
                         command: buildCommand,
                         workingDirectory: workspacePath,
-                        buildTime: Date.now()
+                        buildTime: Date.now(),
+                        repoUrl: repoUrl
                     });
+
+                    await uploadToFirebase({
+                        timestamp: new Date().toISOString(),
+                        error: truncateString(buildOutput.trim(), MAX_ERROR_LENGTH),
+                        branch: branchName,
+                        developer: developer,
+                        exitCode: code,
+                        command: buildCommand,
+                        workingDirectory: workspacePath,
+                        buildTime: Date.now(),
+                        repoUrl: repoUrl
+                    });
+                    
 
                     vscode.window.showErrorMessage(`Build failed with exit code ${code}! Check dashboard for details.`);
                 }
