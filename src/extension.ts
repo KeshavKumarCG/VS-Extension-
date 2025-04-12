@@ -506,17 +506,6 @@ async function saveLog(logEntry: any) {
     }
 }
 
-async function clearLogs(): Promise<boolean> {
-    try {
-        await fs.promises.writeFile(logFilePath, JSON.stringify([], null, 2));
-        vscode.window.showInformationMessage('Build logs cleared successfully');
-        return true;
-    } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        vscode.window.showErrorMessage(`Failed to clear logs: ${message}`);
-        return false;
-    }
-}
 
 function showBuildDashboard() {
     try {
@@ -539,14 +528,6 @@ function showBuildDashboard() {
                         case "exportLogs":
                             await exportLogs();
                             break;
-                        case "clearLogs":
-                            const success = await clearLogs();
-                            if (success) {
-                                // Refresh the dashboard after clearing logs
-                                loadAndDisplayLogs(panel);
-                            }
-                            break;
-
                         case "analyzeError":
                             // Handle the analyzeError command
                             if (message.errorContent) {
@@ -820,7 +801,6 @@ function generateDashboardHtml(logs: any[]): string {
         <ul>${errorList || "No errors logged yet."}</ul>
         <div class="button-group">
             <button id="exportLogs">Export Logs</button>
-            <button id="clearLogs">Clear All Logs</button>
         </div>
     </div>
 <script>
@@ -828,11 +808,6 @@ function generateDashboardHtml(logs: any[]): string {
             const vscode = acquireVsCodeApi();
             document.getElementById("exportLogs").addEventListener("click", () => {
                 vscode.postMessage({ command: "exportLogs" });
-            });
-            document.getElementById("clearLogs").addEventListener("click", () => {
-                if (confirm("Are you sure you want to clear all logs? This cannot be undone.")) {
-                    vscode.postMessage({ command: "clearLogs" });
-                }
             });
     
             document.querySelectorAll(".ai-analyze-btn").forEach(btn => {
