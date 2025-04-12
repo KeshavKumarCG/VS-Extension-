@@ -34,6 +34,15 @@
         "category": "Build Logger"
       }
     ],
+    "menus": {
+      "statusBar/item": [
+        {
+          "command": "build-logger.showDashboard",
+          "when": "false",
+          "group": "navigation"
+        }
+      ]
+    },
     "activationEvents": [
       "onCommand:build-logger.trackBuilds",
       "onCommand:build-logger.showDashboard",
