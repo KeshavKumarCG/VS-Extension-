@@ -2,7 +2,9 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import { spawn, exec } from 'child_process';
-import { GoogleGenerativeAI } from "@google/generative-ai";
+//import { GoogleGenerativeAI } from "@google/generative-ai";
+import { workspace, Disposable } from 'vscode';
+//import * as git from './git'; // You'll need to create this or use a Git extension API
 
 
 const MAX_LOG_ENTRIES = 1000;
@@ -12,39 +14,41 @@ const apiKey = 'AIzaSyAxlupK8tH6tREscjTSBquQflJ0QSGCC4I';
 let workspacePath: string;
 let logFilePath: string;
 let buildTerminal: vscode.Terminal | undefined;
+let buildDebounceTimer: NodeJS.Timeout;
+const DEBOUNCE_TIME = 2000; // 2 seconds
 
-export function activate(context: vscode.ExtensionContext) {
+// export function activate(context: vscode.ExtensionContext) {
 
-    workspacePath = getCorrectWorkspacePath();
+//     workspacePath = getCorrectWorkspacePath();
 
-    if (!fs.existsSync(path.join(workspacePath, 'package.json'))) {
-        vscode.window.showWarningMessage(
-            'Build Logger: No package.json found in current workspace. Some features may not work properly.',
-            'Open Project Folder'
-        ).then(selection => {
-            if (selection === 'Open Project Folder') {
-                vscode.commands.executeCommand('vscode.openFolder');
-            }
-        });
-    }
+//     if (!fs.existsSync(path.join(workspacePath, 'package.json'))) {
+//         vscode.window.showWarningMessage(
+//             'Build Logger: No package.json found in current workspace. Some features may not work properly.',
+//             'Open Project Folder'
+//         ).then(selection => {
+//             if (selection === 'Open Project Folder') {
+//                 vscode.commands.executeCommand('vscode.openFolder');
+//             }
+//         });
+//     }
 
-    // Get log file path from configuration or use default
-    const configLogPath = vscode.workspace.getConfiguration('build-logger').get<string>('logFilePath');
-    logFilePath = configLogPath
-        ? path.resolve(workspacePath, configLogPath)
-        : path.join(workspacePath, 'build_logs.json');
+//     // Get log file path from configuration or use default
+//     const configLogPath = vscode.workspace.getConfiguration('build-logger').get<string>('logFilePath');
+//     logFilePath = configLogPath
+//         ? path.resolve(workspacePath, configLogPath)
+//         : path.join(workspacePath, 'build_logs.json');
 
-    // Ensure log directory exists
-    ensureLogDirectoryExists();
+//     // Ensure log directory exists
+//     ensureLogDirectoryExists();
 
-    // Register commands
-    context.subscriptions.push(
-        vscode.commands.registerCommand('build-logger.trackBuilds', trackBuilds),
-        vscode.commands.registerCommand('build-logger.showDashboard', showBuildDashboard),
-        vscode.commands.registerCommand('build-logger.exportLogs', exportLogs),
-        vscode.commands.registerCommand('build-logger.analyzeWithAI', analyzeErrorWithAI)
-    );
-}
+//     // Register commands
+//     context.subscriptions.push(
+//         vscode.commands.registerCommand('build-logger.trackBuilds', trackBuilds),
+//         vscode.commands.registerCommand('build-logger.showDashboard', showBuildDashboard),
+//         vscode.commands.registerCommand('build-logger.exportLogs', exportLogs),
+//         vscode.commands.registerCommand('build-logger.analyzeWithAI', analyzeErrorWithAI)
+//     );
+// }
 
 
 async function analyzeErrorWithAI(errorContent?: string) {
@@ -952,4 +956,275 @@ export function deactivate() {
     } catch (error) {
         console.error('Error in deactivate:', error);
     }
+}
+
+async function hasMeaningfulChanges(): Promise<boolean> {
+    try {
+        // Check for staged changes excluding whitespace
+        const diff = await executeCommand('git diff --cached --ignore-all-space --ignore-blank-lines');
+        
+        // Simple check for non-comment changes
+        return diff.split('\n').some(line => {
+            const trimmed = line.trim();
+            return trimmed && 
+                   !trimmed.startsWith('//') && 
+                   !trimmed.startsWith('#') && 
+                   !trimmed.startsWith('/*');
+        });
+    } catch (error) {
+        console.error('Error checking Git changes:', error);
+        return false;
+    }
+}
+
+let gitWatcher: vscode.FileSystemWatcher;
+
+function setupGitCommitWatcher(context: vscode.ExtensionContext) {
+    // Watch for HEAD changes
+    gitWatcher = vscode.workspace.createFileSystemWatcher('**/.git/HEAD');
+    
+    gitWatcher.onDidChange(async () => {
+        vscode.window.showInformationMessage('Git HEAD changed - checking for meaningful changes...');
+        if (await hasMeaningfulChanges()) {
+            vscode.commands.executeCommand('build-logger.trackBuilds');
+        }
+    });
+    
+    context.subscriptions.push(gitWatcher);
+    
+    // // Also watch for commits via the VS Code Git extension
+    // const gitExtension = vscode.extensions.getExtension('vscode.git')?.exports;
+    // if (gitExtension) {
+    //     const git = gitExtension.getAPI(1);
+    //     git.onDidCommit(() => {
+    //         vscode.window.showInformationMessage('Git commit detected via VSCode Git extension');
+    //         vscode.commands.executeCommand('build-logger.trackBuilds');
+    //     });
+    // }
+//     const gitExtension = vscode.extensions.getExtension('vscode.git')?.exports;
+// if (gitExtension) {
+//     const git = gitExtension.getAPI(1);
+//     git.repositories.forEach((repo: vscode.SourceControl) => {
+//         repo.onDidChangeState(async () => {
+//             if (repo.state.workingTreeChanges.length > 0) {
+//                 if (await hasMeaningfulChanges()) {
+//                     vscode.commands.executeCommand('build-logger.trackBuilds');
+//                 }
+//             }
+//         });
+//     });
+// }
+}
+
+// // Add this to your activate function
+// export function activate(context: vscode.ExtensionContext) {
+//     // ... existing activation code ...
+
+//     // Register Git watcher
+//     const gitWatcher = workspace.createFileSystemWatcher('**/.git/HEAD');
+//     context.subscriptions.push(gitWatcher);
+
+//     // Watch for Git commits
+//     gitWatcher.onDidChange(async uri => {
+//         try {
+//             const hasMeaningfulChanges = await checkMeaningfulChanges();
+//             if (hasMeaningfulChanges) {
+//                 vscode.window.showInformationMessage('Changes detected, starting build tracking...');
+//                 await trackBuilds();
+//             }
+//         } catch (error) {
+//             console.error('Error in Git watcher:', error);
+//         }
+//     });
+
+//     // ... rest of your activation code ...
+// }
+
+// Add this new helper function
+async function checkMeaningfulChanges(): Promise<boolean> {
+    try {
+        // Get Git diff
+        const diff = await executeCommand('git diff --cached --ignore-all-space --ignore-blank-lines --diff-filter=ACMRTUXB');
+        
+        // Check if diff contains actual code changes (not just comments or whitespace)
+        if (!diff.trim()) {
+            return false;
+        }
+
+        // Filter out comment-only changes (simplified example)
+        const codeLines = diff.split('\n').filter(line => {
+            const trimmed = line.trim();
+            return trimmed && !trimmed.startsWith('//') && !trimmed.startsWith('/*') && !trimmed.startsWith('*');
+        });
+
+        return codeLines.length > 0;
+    } catch (error) {
+        console.error('Error checking meaningful changes:', error);
+        return false;
+    }
+}
+
+// const gitExtension = vscode.extensions.getExtension('vscode.git')?.exports;
+// if (gitExtension) {
+//     const git = gitExtension.getAPI(1);
+//     git.repositories.forEach((repo: any) => {
+//         repo.state.onDidChange(async () => {
+//             if (repo.state.workingTreeChanges.length > 0) {
+//                 await trackBuilds();
+//             }
+//         });
+//     });
+// }
+
+
+
+// // Add these new functions:
+// function setupGitCommitWatcher(context: vscode.ExtensionContext) {
+//     // Watch the Git HEAD file which changes on commits
+//     const gitHeadWatcher = vscode.workspace.createFileSystemWatcher('**/.git/HEAD');
+//     context.subscriptions.push(gitHeadWatcher);
+
+//     gitHeadWatcher.onDidChange(async () => {
+//         try {
+//             // Only trigger if there are meaningful changes
+//             if (await hasMeaningfulChanges()) {
+//                 vscode.window.showInformationMessage('Git commit detected. Starting build tracking...');
+//                 await vscode.commands.executeCommand('build-logger.trackBuilds');
+//             }
+//         } catch (error) {
+//             console.error('Git commit detection failed:', error);
+//         }
+//     });
+// }
+// function setupGitCommitWatcher(context: vscode.ExtensionContext) {
+//     try {
+//         // Watch the Git HEAD file which changes on commits
+//         const gitHeadWatcher = vscode.workspace.createFileSystemWatcher('**/.git/HEAD');
+//         context.subscriptions.push(gitHeadWatcher);
+
+//         gitHeadWatcher.onDidChange(async () => {
+//             try {
+//                 if (await hasMeaningfulChanges()) {
+//                     vscode.window.showInformationMessage('Git commit detected. Starting build tracking...');
+//                     await vscode.commands.executeCommand('build-logger.trackBuilds');
+//                 }
+//             } catch (error) {
+//                 console.error('Error in Git watcher:', error);
+//             }
+//         });
+//     } catch (error) {
+//         console.error('Failed to setup Git watcher:', error);
+//     }
+// }
+async function setupGitIntegration(context: vscode.ExtensionContext) {
+    try {
+        const gitExtension = vscode.extensions.getExtension('vscode.git');
+        if (!gitExtension) {
+            console.log('Git extension not available');
+            return;
+        }
+
+        if (!gitExtension.isActive) {
+            await gitExtension.activate();
+        }
+
+        const git = gitExtension.exports.getAPI(1);
+        
+        git.repositories.forEach((repo: any) => {
+            const disposable = repo.onDidChangeRepository(async () => {
+                if (repo.state.workingTreeChanges.length > 0) {
+                    console.log('Git changes detected');
+                    if (await hasMeaningfulChanges()) {
+                        vscode.window.showInformationMessage('Triggering build after Git changes...');
+                        vscode.commands.executeCommand('build-logger.trackBuilds');
+                    }
+                }
+            });
+            
+            context.subscriptions.push(disposable);
+        });
+
+    } catch (error) {
+        console.error('Failed to setup Git integration:', error);
+    }
+}
+export function activate(context: vscode.ExtensionContext) {
+    workspacePath = getCorrectWorkspacePath();
+
+    if (!fs.existsSync(path.join(workspacePath, 'package.json'))) {
+        vscode.window.showWarningMessage(
+            'Build Logger: No package.json found in current workspace. Some features may not work properly.',
+            'Open Project Folder'
+        ).then(selection => {
+            if (selection === 'Open Project Folder') {
+                vscode.commands.executeCommand('vscode.openFolder');
+            }
+        });
+        setupGitIntegration(context);
+    } else {
+
+    // Get log file path from configuration or use default
+    const configLogPath = vscode.workspace.getConfiguration('build-logger').get<string>('logFilePath');
+    logFilePath = configLogPath
+        ? path.resolve(workspacePath, configLogPath)
+        : path.join(workspacePath, 'build_logs.json');
+
+    // Ensure log directory exists
+    ensureLogDirectoryExists();
+
+    // Register commands
+    context.subscriptions.push(
+        vscode.commands.registerCommand('build-logger.trackBuilds', trackBuilds),
+        vscode.commands.registerCommand('build-logger.showDashboard', showBuildDashboard),
+        vscode.commands.registerCommand('build-logger.exportLogs', exportLogs),
+        vscode.commands.registerCommand('build-logger.analyzeWithAI', analyzeErrorWithAI)
+    );
+
+    // Setup Git watcher if enabled in config
+    if (vscode.workspace.getConfiguration('build-logger').get<boolean>('autoTrackOnCommit', true)) {
+        setupGitCommitWatcher(context);
+    }
+}
+// Add this new helper function
+async function shouldTriggerBuild(): Promise<boolean> {
+    // 1. Check if we're in a Git repo
+    try {
+        await executeCommand('git rev-parse --is-inside-work-tree');
+    } catch {
+        return false; // Not a Git repo
+    }
+
+    // 2. Check for staged changes that aren't just whitespace/comments
+    const diff = await executeCommand('git diff --cached --ignore-all-space --ignore-blank-lines');
+    
+    if (!diff.trim()) {
+        return false; // No substantial changes
+    }
+
+    // 3. Simple check for non-comment changes (customize as needed)
+    const meaningfulChanges = diff.split('\n').some(line => {
+        const trimmed = line.trim();
+        return trimmed && 
+               !trimmed.startsWith('//') && 
+               !trimmed.startsWith('#') && 
+               !trimmed.startsWith('/*');
+    });
+
+    return meaningfulChanges;
+}
+
+setTimeout(() => {
+    vscode.commands.executeCommand('build-logger.trackBuilds');
+}, 1000);
+
+
+
+async function isGitRepo() {
+    try {
+        await executeCommand('git rev-parse --is-inside-work-tree');
+        return true;
+    } catch {
+        return false;
+    }
+}
 }

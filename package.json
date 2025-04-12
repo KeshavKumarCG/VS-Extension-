@@ -70,7 +70,12 @@
           "type": "string",
           "default": "",
           "description": "Google Gemini API key for AI analysis features"
-        }
+        },
+        "build-logger.autoTrackOnCommit": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically track builds when Git commits occur"
+      }
       }
     }
   },
@@ -108,5 +113,10 @@
   "dependencies": {
     "@google/generative-ai": "^0.24.0",
     "axios": "^1.8.4"
-  }
+  },
+  "capabilities": {
+    "untrustedWorkspaces": {
+        "supported": true
+    }
+}
 }
