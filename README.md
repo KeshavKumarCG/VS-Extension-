@@ -104,3 +104,7 @@ This project is licensed under the [MIT License](LICENSE).
 
 **Happy Coding!** 🎉  
 *Maintained by [Keshav Kumar](https://github.com/KeshavKumarCG)*
+*Maintained by [Harshdeep Singh](https://github.com/HarshdeepSinghCG)*
+*Maintained by [Gursimran Kaur](https://github.com/GursimranKaur1112)*
+*Maintained by [Anushka Soni](https://github.com/anushkasoniCG)*
+*Maintained by [Shantanu Sahoo](https://github.com/Cgshantanu)*
