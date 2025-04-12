@@ -532,7 +532,7 @@ function showBuildDashboard() {
     try {
         const panel = vscode.window.createWebviewPanel(
             'buildLoggerDashboard',
-            'Build Failure Dashboard',
+            'Build Logger Dashboard',
             vscode.ViewColumn.One,
             {
                 enableScripts: true,
@@ -642,14 +642,14 @@ function generateDashboardHtml(logs: any[]): string {
                 ? errorSig.substring(0, 200) + '...'
                 : errorSig);
             return `
-            <li>
-                <details>
+            <li style="display: flex; justify-content: space-between; align-items: center;">
+                <details style="flex-grow: 1; margin-right: 10px;">
                     <summary><strong>${count}x</strong> ${shortError}</summary>
                     <pre class="error-details">${escapeHtml(fullError)}</pre>
-                    <button class="ai-analyze-btn" data-error="${escapeHtml(encodeURIComponent(fullError))}">
-                        Analyze with AI
-                    </button>
                 </details>
+                <button class="ai-analyze-btn" data-error="${escapeHtml(encodeURIComponent(fullError))}">
+                   🧠 Analyze with AI
+                </button>
             </li>
             `;
         })
@@ -673,194 +673,292 @@ function generateDashboardHtml(logs: any[]): string {
         .map(([cmd, count]) => `<li><strong>${escapeHtml(cmd)}:</strong> ${count} failures</li>`)
         .join('');
 
-    return `
-        <!DOCTYPE html>
+    return `<!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Build Failure Dashboard</title>
-    <style>
-        :root {
-            --primary-color: #007acc;
-            --secondary-color: #005f99;
-            --background-light: #f4f4f4;
-            --background-dark: #1e1e1e;
-            --card-bg: #ffffff;
-            --text-color: #333;
-            --shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-        }
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: var(--background-light);
-            color: var(--text-color);
-            margin: 0;
-            padding: 20px;
-            transition: all 0.3s ease-in-out;
-        }
-        h2 {
-            color: var(--primary-color);
-            border-bottom: 3px solid var(--primary-color);
-            padding-bottom: 10px;
-        }
-        .container {
-            max-width: 900px;
-            margin: 0 auto;
-        }
-        .stats, .stats-card, li {
-            background-color: var(--card-bg);
-            padding: 15px;
-            border-radius: 8px;
-            box-shadow: var(--shadow);
-            transition: transform 0.2s ease-in-out;
-        }
-        .stats:hover, .stats-card:hover, li:hover {
-            transform: translateY(-3px);
-        }
-        .stats {
-            margin-bottom: 20px;
-        }
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-            gap: 20px;
-            margin-top: 20px;
-        }
-        ul {
-            list-style: none;
-            padding: 0;
-        }
-        li {
-            margin-bottom: 8px;
-            padding: 10px;
-        }
-        button {
-            padding: 12px 24px;
-            background: var(--primary-color);
-            color: white;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            font-weight: bold;
-            transition: background 0.3s ease, transform 0.2s ease;
-        }
-        button:hover {
-            background: var(--secondary-color);
-            transform: scale(1.05);
-        }
-        .button-group {
-            margin-top: 20px;
-            display: flex;
-            gap: 15px;
-        }
-        .error-details {
-            white-space: pre-wrap;
-            background-color: #f8f8f8;
-            padding: 10px;
-            border-radius: 4px;
-            margin-top: 5px;
-            max-height: 300px;
-            overflow: auto;
-        }
-        details summary {
-            cursor: pointer;
-            font-weight: bold;
-        }
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Build Logger Dashboard</title>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet"/>
+  <style>
+    :root {
+    --primary-dark: #1e1e2f;
+    --hover-dark: #2c2c3d;
+    --accent-dark: #333344;
+    --accent-hover: #444455;
+    --background: #2a2a2a;  /* Dark gray background */
+    --card-bg: #3c3f41;     /* Darker gray card background */
+    --text-color: #e0e0e0;  /* Light gray text */
+    --text-secondary: #b0b0b0; /* Lighter gray for secondary text */
+    --header-color: #e0e0e0; /* Light gray headers */
+    --border: #555;         /* Darker border */
+    --card-shadow: 0 4px 6px rgba(0,0,0,0.05), 0 1px 3px rgba(0,0,0,0.1);
+    --card-hover-shadow: 0 6px 12px rgba(0,0,0,0.1);
+    --border-radius: 10px;
 
-        .ai-analyze-btn {
-            margin-top: 10px;
-            padding: 6px 12px;
-            background: #4285f4;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 0.9em;
-        }
+    --export-btn-bg: #4caf50;  /* Lighter green for export */
+    --export-btn-hover-bg: #45a049;  /* Darker green on hover */
+    --ai-btn-bg: #f39c12;  /* Yellow for AI analyze button */
+    --ai-btn-hover-bg: #e67e22;  /* Darker yellow on hover */
+    }
 
-        .ai-analyze-btn:hover {
-            background: #3367d6;
-        }
+    * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    }
 
-        @media (prefers-color-scheme: dark) {
-            body {
-                background-color: var(--background-dark);
-                color: #ddd;
-            }
-            .stats, .stats-card, li {
-                background-color: #252526;
-                color: #ddd;
-            }
-            .error-details {
-                background-color: #333;
-            }
-        }
-    </style>
+    body {
+    padding: 32px;
+    font-family: 'Roboto', sans-serif;
+    background-color: var(--background);
+    color: var(--text-color);
+    }
+
+    h2, h3 {
+    color: var(--header-color);
+    }
+
+    h2 {
+    font-size: 28px;
+    margin-bottom: 20px;
+    }
+
+    h3 {
+    font-size: 22px;
+    margin-bottom: 16px;
+    }
+
+    .container {
+    max-width: 1200px;
+    margin: 0 auto;
+    }
+
+    .card {
+    background-color: var(--card-bg);
+    padding: 24px;
+    border-radius: var(--border-radius);
+    box-shadow: var(--card-shadow);
+    margin-bottom: 30px;
+    border: 1px solid var(--border);
+    transition: all 0.3s ease;
+    }
+
+    .card:hover {
+    box-shadow: var(--card-hover-shadow);
+    transform: translateY(-2px);
+    }
+
+    .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 24px;
+    margin-bottom: 32px;
+    }
+
+    ul {
+    list-style: none;
+    padding: 0;
+    }
+
+    li {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    transition: background 0.2s ease;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    }
+
+    li:hover {
+    background-color: rgba(0, 0, 0, 0.03);
+    border-radius: 6px;
+    }
+
+.button{
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 24px;
+    font-size: 16px;
+    font-weight: 600;
+    border-radius: 6px;
+    cursor: pointer;
+    border: none;
+    color: white;
+    transition: all 0.3s ease;
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.2); /* Subtle shadow for depth */
+}
+
+.ai-analyze-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 22px;
+    font-size: 12px;
+    font-weight: 600;
+    border-radius: 6px;
+    cursor: pointer;
+    border: none;
+    color: white;
+    transition: all 0.3s ease;
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.2); /* Subtle shadow for depth */
+}
+
+.button {
+    background: #007bff; /* Solid blue background */
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); /* Light shadow for subtle depth */
+    color: white; /* Ensures the text is readable */
+}
+
+.button:hover {
+    background: #0056b3; /* Darker blue on hover */
+    transform: translateY(-2px); /* Slightly raise the button on hover */
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15); /* Stronger shadow on hover */
+}
+
+
+.ai-analyze-btn {
+    background: #2c6b3e; /* Warm yellow gradient */
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); /* Light shadow for subtle depth */
+}
+
+.ai-analyze-btn:hover {
+    background: #245a32; /* Darker green on hover */
+    transform: translateY(-2px); /* Slightly raise the button on hover */
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15); /* Stronger shadow on hover */
+}
+
+
+    .material-icons {
+    font-size: 18px;
+    }
+
+    .note {
+    font-size: 14px;
+    color: var(--text-secondary);
+    margin-top: 12px;
+    }
+
+    .summary-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+    }
+
+    .error-summary {
+    white-space: pre-wrap;
+    font-family: 'Roboto Mono', monospace;
+    background-color: #3e4346;
+    border: 1px solid var(--border);
+    padding: 16px;
+    border-radius: var(--border-radius);
+    max-height: 300px;
+    overflow-y: auto;
+    font-size: 14px;
+    line-height: 1.6;
+    }
+
+    .error-count, .stats-value {
+    font-weight: 500;
+    color: #ccc;
+    }
+
+    .button-group {
+    display: flex;
+    gap: 16px;
+    margin-top: 32px;
+    }
+
+    @media (max-width: 768px) {
+    body {
+      padding: 16px;
+    }
+
+    h2 {
+      font-size: 24px;
+    }
+
+    h3 {
+      font-size: 18px;
+    }
+
+    .card {
+      padding: 20px;
+    }
+
+    .grid {
+      gap: 16px;
+    }
+    }
+  </style>
 </head>
 <body>
-    <div class="container">
-        <h2>Build Failure Dashboard</h2>
-        <div class="stats">
-            <p><strong>Total Failed Builds:</strong> ${failedBuilds}</p>
-            ${failedBuilds > MAX_LOG_ENTRIES
-            ? `<p class="warning">Showing most recent ${MAX_LOG_ENTRIES} entries (log rotation active)</p>`
-            : ''}
-        </div>
-        <div class="stats-grid">
-            <div class="stats-card">
-                <h3>Developer Statistics</h3>
-                <ul>${developerList || `<li>No developer data available</li>`}</ul>
-            </div>
-            <div class="stats-card">
-                <h3>Branch Statistics</h3>
-                <ul>${branchList || `<li>No branch data available</li>`}</ul>
-            </div>
-            <div class="stats-card">
-                <h3>Command Statistics</h3>
-                <ul>${commandList || `<li>No command data available</li>`}</ul>
-            </div>
-        </div>
-        <h3>Most Common Errors (Top 20)</h3>
-       <ul>
-  ${logs.map(log => `
-    <li>
-        <strong>${log.message}</strong>
-        <details class="error-details">
-            <summary>Details</summary>
-            ${escapeHtml(log.error)}
-        </details>
-        <button class="analyze-btn" style= "margin-top:5px" data-error="${escapeHtml(JSON.stringify(log.error))}">Analyze with AI</button>
-        <div class="ai-response" style="margin-top: 10px;"></div>
-    </li>
-  `).join('') || "<li>No errors logged yet.</li>"}
-</ul>
+  <div class="container">
+    <h2>📊 Build Logger Dashboard</h2>
 
-        <div class="button-group">
-            <button id="exportLogs">Export Logs</button>
-        </div>
+    <div class="card">
+    <h3>📈 Build Summary</h3>
+    <h4>❌ ${failedBuilds} failed builds</h4>
     </div>
-    
-<script>
-    (function() {
-            const vscode = acquireVsCodeApi();
-            document.getElementById("exportLogs").addEventListener("click", () => {
-                vscode.postMessage({ command: "exportLogs" });
-            });
-    
-            document.querySelectorAll(".ai-analyze-btn").forEach(btn => {
-                btn.addEventListener("click", (e) => {
-                    const errorContent = decodeURIComponent(btn.dataset.error || "");
-                    vscode.postMessage({ 
-                        command: "analyzeError", 
-                        errorContent: errorContent 
-                    });
-                });
-            });
-        })();
-</script>
 
+    <div class="grid">
+    <div class="card">
+      <h3>👩‍💻 Developer Statistics</h3>
+      <ul>${developerList || `<li>😕 No developer data available</li>`}</ul>
+    </div>
+
+    <div class="card">
+      <h3>🌿 Branch Statistics</h3>
+      <ul>${branchList || `<li>🌱 No branch data available</li>`}</ul>
+    </div>
+
+    <div class="card">
+      <h3>🔧 Command Statistics</h3>
+      <ul>${commandList || `<li>🤷‍♂️ No command data available</li>`}</ul>
+    </div>
+    </div>
+
+    <div class="card">
+    <h3>🐞 Common Errors</h3>
+    <p class="note">Top 20 most frequent build errors</p>
+    <ul>
+      ${errorList || `<li>🎉 No errors logged yet</li>`}
+    </ul>
+    </div>
+
+    <div class="button-group">
+    <button class="button" id="exportLogs">
+      Export Logs
+    </button>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+    const vscode = acquireVsCodeApi();
+
+    document.getElementById("exportLogs").addEventListener("click", () => {
+      vscode.postMessage({ command: "exportLogs" });
+    });
+
+    document.querySelectorAll(".ai-analyze-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const errorContent = decodeURIComponent(btn.dataset.error || "");
+        vscode.postMessage({
+        command: "analyzeError",
+        errorContent
+        });
+      });
+    });
+    })();
+  </script>
 </body>
-</html>`;
+</html>
+`;
+
 }
 
 function generateErrorHtml(title: string, message: string): string {
