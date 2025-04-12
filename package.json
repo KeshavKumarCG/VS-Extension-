@@ -139,6 +139,8 @@
     "typescript": "^5.8.2"
   },
   "dependencies": {
-    "axios": "^1.8.4"
+    "@google/generative-ai": "^0.24.0",
+    "axios": "^1.8.4",
+    "firebase": "^11.6.0"
   }
 }
