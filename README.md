@@ -24,9 +24,10 @@ A Visual Studio Code extension that tracks build failures, collects contextual i
 ## Installation 📦
 
 1. Open **VS Code**
-2. Press `Ctrl+P` (Cmd+P on Mac) and run:
+2. Copy and run the following commands in your terminal:
    ```bash
-   ext install KeshavKumar.build-logger
+   vsce package
+   code --install-extension build-logger-0.0.2.vsix
    ```
 3. Reload VS Code when prompted
 
@@ -48,7 +49,7 @@ A Visual Studio Code extension that tracks build failures, collects contextual i
 | Command                | Shortcut  | Description                     |
 |------------------------|-----------|---------------------------------|
 | Track Builds           | `Ctrl+Alt+B` | Start monitoring build process |
-| Show Build Dashboard   | `Ctrl+Alt+D` | Open analytics dashboard       |
+| Show Build Dashboard   | `Ctrl+Alt+D` | Open analytics dashboard with AI Intgration |
 
 ## Configuration ⚙️
 
