@@ -8,7 +8,6 @@ import { getGitRemoteUrl } from './utils/gitUtils';
 
 const MAX_LOG_ENTRIES = 1000;
 const MAX_ERROR_LENGTH = 5000;
-const apiKey = 'AIzaSyAxlupK8tH6tREscjTSBquQflJ0QSGCC4I';
 
 let workspacePath: string;
 let logFilePath: string;
