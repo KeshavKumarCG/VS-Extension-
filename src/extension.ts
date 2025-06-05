@@ -15,15 +15,25 @@ let buildTerminal: vscode.Terminal | undefined;
 
 export function activate(context: vscode.ExtensionContext) {
 
-    const statusBarBtn = vscode.window.createStatusBarItem(
+    const trackBtn = vscode.window.createStatusBarItem(
         vscode.StatusBarAlignment.Right, 
-        100
+        101 
     );
-    statusBarBtn.command = "build-logger.showDashboard";
-    statusBarBtn.text = "$(graph) Build Logger"; 
-    statusBarBtn.tooltip = "Open Build Logger Dashboard";
-    statusBarBtn.show();
-    context.subscriptions.push(statusBarBtn);
+    trackBtn.command = "build-logger.trackBuilds";
+    trackBtn.text = "$(debug-start) Track Builds";
+    trackBtn.tooltip = "Start tracking builds";
+    trackBtn.show();
+
+    const dashboardBtn = vscode.window.createStatusBarItem(
+        vscode.StatusBarAlignment.Right, 
+        100  
+    );
+    dashboardBtn.command = "build-logger.showDashboard";
+    dashboardBtn.text = "$(graph) Build Logger";
+    dashboardBtn.tooltip = "Open Build Logger Dashboard";
+    dashboardBtn.show();
+
+    context.subscriptions.push(trackBtn, dashboardBtn);
 
     workspacePath = getCorrectWorkspacePath();
 

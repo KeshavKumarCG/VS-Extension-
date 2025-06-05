@@ -1,4 +1,5 @@
 {
+  "$schema": "https://json.schemastore.org/package.json",
   "name": "build-logger",
   "displayName": "Build Logger",
   "description": "Logs build failures and provides analysis.",
