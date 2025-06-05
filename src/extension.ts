@@ -35,16 +35,6 @@ export function activate(context: vscode.ExtensionContext) {
 
     context.subscriptions.push(trackBtn, dashboardBtn);
 
-    const statusBarBtn = vscode.window.createStatusBarItem(
-        vscode.StatusBarAlignment.Right, 
-        100
-    );
-    statusBarBtn.command = "build-logger.showDashboard";
-    statusBarBtn.text = "$(graph) Build Logger"; 
-    statusBarBtn.tooltip = "Open Build Logger Dashboard";
-    statusBarBtn.show();
-    context.subscriptions.push(statusBarBtn);
-
     workspacePath = getCorrectWorkspacePath();
 
     if (!fs.existsSync(path.join(workspacePath, 'package.json'))) {
