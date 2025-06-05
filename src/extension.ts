@@ -8,11 +8,6 @@ import { getGitRemoteUrl } from "./utils/gitUtils";
 
 const MAX_LOG_ENTRIES = 1000;
 const MAX_ERROR_LENGTH = 5000;
-const MAX_OUTPUT_BUFFER = 10 * 1024 * 1024; 
-const PROCESS_TIMEOUT = 30 * 60 * 1000; 
-const MAX_CONCURRENT_BUILDS = 3;
-const RETRY_ATTEMPTS = 3;
-const RETRY_DELAY = 1000;
 
 let workspacePath: string;
 let logFilePath: string;
