@@ -15,6 +15,26 @@ let buildTerminal: vscode.Terminal | undefined;
 
 export function activate(context: vscode.ExtensionContext) {
 
+    const trackBtn = vscode.window.createStatusBarItem(
+        vscode.StatusBarAlignment.Right, 
+        101 
+    );
+    trackBtn.command = "build-logger.trackBuilds";
+    trackBtn.text = "$(debug-start) Track Builds";
+    trackBtn.tooltip = "Start tracking builds";
+    trackBtn.show();
+
+    const dashboardBtn = vscode.window.createStatusBarItem(
+        vscode.StatusBarAlignment.Right, 
+        100  
+    );
+    dashboardBtn.command = "build-logger.showDashboard";
+    dashboardBtn.text = "$(graph) Build Logger";
+    dashboardBtn.tooltip = "Open Build Logger Dashboard";
+    dashboardBtn.show();
+
+    context.subscriptions.push(trackBtn, dashboardBtn);
+
     const statusBarBtn = vscode.window.createStatusBarItem(
         vscode.StatusBarAlignment.Right, 
         100
