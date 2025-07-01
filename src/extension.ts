@@ -200,24 +200,7 @@ async function getAIErrorAnalysis(
   }
 }
 
-function getCorrectWorkspacePath(): string {
-  if (vscode.workspace.workspaceFolders?.length) {
-    return vscode.workspace.workspaceFolders[0].uri.fsPath;
-  }
 
-  if (vscode.window.activeTextEditor?.document.uri.fsPath) {
-    return path.dirname(vscode.window.activeTextEditor.document.uri.fsPath);
-  }
-
-  const cwd = process.cwd();
-  const vscodeInstallPath = path.dirname(process.execPath);
-
-  if (cwd.startsWith(vscodeInstallPath)) {
-    return path.dirname(cwd);
-  }
-
-  return cwd;
-}
 
 function ensureLogDirectoryExists() {
   const logDir = path.dirname(logFilePath);
@@ -230,15 +213,30 @@ async function trackBuilds() {
   try {
     // Verify workspace path is valid
     workspacePath = getCorrectWorkspacePath();
+    
+    // Validate workspace path more thoroughly
+    if (!workspacePath || !path.isAbsolute(workspacePath)) {
+      throw new Error("Invalid workspace path format");
+    }
+    
     if (!fs.existsSync(workspacePath)) {
       throw new Error(
-        "Invalid workspace path. Please open a project folder first."
+        `Workspace path does not exist: ${workspacePath}. Please open a project folder first.`
+      );
+    }
+
+    // Check if it's actually a directory
+    const stat = fs.statSync(workspacePath);
+    if (!stat.isDirectory()) {
+      throw new Error(
+        `Workspace path is not a directory: ${workspacePath}`
       );
     }
 
     // Clean up any existing terminal
     if (buildTerminal) {
       buildTerminal.dispose();
+      buildTerminal = undefined;
     }
 
     vscode.window.showInformationMessage(
@@ -249,28 +247,61 @@ async function trackBuilds() {
     const configLogPath = vscode.workspace
       .getConfiguration("build-logger")
       .get<string>("logFilePath");
+    
     logFilePath = configLogPath
       ? path.resolve(workspacePath, configLogPath)
       : path.join(workspacePath, "build_logs.json");
 
+    // Ensure log directory exists
     ensureLogDirectoryExists();
 
+    // Validate build command before starting
+    try {
+      getValidatedBuildCommand();
+    } catch (error) {
+      vscode.window.showWarningMessage(
+        `Build command validation failed: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+
     await runBuildProcess();
+
   } catch (error) {
     console.error("Error in trackBuilds:", error);
+    
+    let errorMessage = "Failed to track builds: ";
+    if (error instanceof Error) {
+      errorMessage += error.message;
+    } else {
+      errorMessage += String(error);
+    }
+
     vscode.window
-      .showErrorMessage(
-        `Failed to track builds: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-        "Open Folder"
-      )
+      .showErrorMessage(errorMessage, "Open Folder", "Retry")
       .then((selection) => {
         if (selection === "Open Folder") {
           vscode.commands.executeCommand("vscode.openFolder");
+        } else if (selection === "Retry") {
+          // Retry after a short delay
+          setTimeout(() => trackBuilds(), 1000);
         }
       });
   }
+}
+
+function getCorrectWorkspacePath(): string {
+ 
+  if (vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0) {
+    return vscode.workspace.workspaceFolders[0].uri.fsPath;
+  }
+  
+  // Fallback to active text editor path
+  if (vscode.window.activeTextEditor) {
+    const documentPath = vscode.window.activeTextEditor.document.uri.fsPath;
+    return path.dirname(documentPath);
+  }
+  
+  throw new Error("No workspace folder found. Please open a project folder first.");
 }
 
 async function runBuildProcess() {
@@ -470,37 +501,40 @@ function handleBuildError(error: unknown) {
 }
 
 function getValidatedBuildCommand(): string {
-  let buildCommand =
-    vscode.workspace
-      .getConfiguration("build-logger")
-      .get<string>("buildCommand") || "";
-  const isWindows = process.platform === "win32";
-
+  const config = vscode.workspace.getConfiguration("build-logger");
+  let buildCommand = config.get<string>("buildCommand") || "npm run build";
+  
+  // Validate and fix common build commands
   if (!buildCommand.trim()) {
-    if (fs.existsSync(path.join(workspacePath, "package.json"))) {
-      buildCommand = isWindows ? "npm.cmd run build" : "npm run build";
-    } else if (fs.existsSync(path.join(workspacePath, "pom.xml"))) {
-      buildCommand = "mvn clean install";
-    } else if (fs.existsSync(path.join(workspacePath, "build.gradle"))) {
-      buildCommand = isWindows ? "gradlew.bat build" : "./gradlew build";
-    } else {
-      throw new Error(
-        "No build system detected and no build command configured"
-      );
+    buildCommand = "npm run build";
+  }
+  
+
+  const packageJsonPath = path.join(workspacePath, "package.json");
+  if (fs.existsSync(packageJsonPath)) {
+    try {
+      const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf8"));
+      const scripts = packageJson.scripts || {};
+    
+      if (buildCommand.includes("npm run") || buildCommand.includes("yarn") || buildCommand.includes("pnpm")) {
+        const scriptName = buildCommand.split(" ").pop();
+        if (scriptName && !scripts[scriptName]) {
+          if (scripts.build) {
+            buildCommand = "npm run build";
+          } else if (scripts.compile) {
+            buildCommand = "npm run compile";
+          } else if (scripts.dist) {
+            buildCommand = "npm run dist";
+          } else {
+            throw new Error(`Build script '${scriptName}' not found in package.json. Available scripts: ${Object.keys(scripts).join(", ")}`);
+          }
+        }
+      }
+    } catch (error) {
+      console.warn("Could not validate package.json:", error);
     }
   }
-
-  buildCommand = buildCommand.trim();
-  if (!buildCommand) {
-    throw new Error("Build command cannot be empty");
-  }
-
-  // Security checks
-  const dangerousPatterns = [";", "&&", "||", "`", "$("];
-  if (dangerousPatterns.some((pattern) => buildCommand.includes(pattern))) {
-    throw new Error("Build command contains potentially dangerous characters");
-  }
-
+  
   return buildCommand;
 }
 
