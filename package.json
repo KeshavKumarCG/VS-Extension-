@@ -104,6 +104,41 @@
             "Phi - Fast, lightweight model",
             "Gemma - Google's lightweight model"
           ]
+        },
+        "build-logger.firebaseConfig.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "Firebase API Key"
+        },
+        "build-logger.firebaseConfig.authDomain": {
+          "type": "string",
+          "default": "",
+          "description": "Firebase Auth Domain"
+        },
+        "build-logger.firebaseConfig.projectId": {
+          "type": "string",
+          "default": "",
+          "description": "Firebase Project ID"
+        },
+        "build-logger.firebaseConfig.storageBucket": {
+          "type": "string",
+          "default": "",
+          "description": "Firebase Storage Bucket"
+        },
+        "build-logger.firebaseConfig.messagingSenderId": {
+          "type": "string",
+          "default": "",
+          "description": "Firebase Messaging Sender ID"
+        },
+        "build-logger.firebaseConfig.appId": {
+          "type": "string",
+          "default": "",
+          "description": "Firebase App ID"
+        },
+        "build-logger.firebaseConfig.measurementId": {
+          "type": "string",
+          "default": "",
+          "description": "Firebase Measurement ID"
         }
       }
     }
