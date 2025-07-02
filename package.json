@@ -3,7 +3,7 @@
   "name": "build-logger",
   "displayName": "Build Logger",
   "description": "Logs build failures and provides analysis.",
-  "version": "0.0.3",
+  "version": "1.0.0",
   "publisher": "InternNetExplorers",
   "engines": {
     "vscode": "^1.98.0"
