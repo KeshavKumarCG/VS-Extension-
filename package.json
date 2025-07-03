@@ -81,30 +81,6 @@
           "default": "",
           "description": "Google Gemini API key for AI analysis features"
         },
-        "build-logger.enableAIAnalysis": {
-          "type": "boolean",
-          "default": false,
-          "description": "Enable AI analysis of build failures using Ollama"
-        },
-        "build-logger.ollamaModel": {
-          "type": "string",
-          "default": "llama2",
-          "description": "Ollama model to use for AI analysis",
-          "enum": [
-            "llama2",
-            "codellama",
-            "mistral",
-            "phi",
-            "gemma"
-          ],
-          "enumDescriptions": [
-            "Llama 2 - General purpose model",
-            "Code Llama - Specialized for code analysis",
-            "Mistral - Good balance of performance and quality",
-            "Phi - Fast, lightweight model",
-            "Gemma - Google's lightweight model"
-          ]
-        },
         "build-logger.firebaseConfig.apiKey": {
           "type": "string",
           "default": "",
