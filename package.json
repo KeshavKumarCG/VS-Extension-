@@ -135,6 +135,11 @@
           "default": "",
           "description": "Firebase App ID"
         },
+        "build-logger.enableFirebaseLogging": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable logging build failures to Firebase"
+        },
         "build-logger.firebaseConfig.measurementId": {
           "type": "string",
           "default": "",
