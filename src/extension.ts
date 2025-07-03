@@ -340,21 +340,32 @@ async function runBuildProcess() {
           let shell: string;
           let shellArgs: string[];
 
+          // Fixed shell handling for better command parsing
           if (isWindows) {
             shell = process.env.ComSpec || "cmd.exe";
-            shellArgs = ["/c"];
+            shellArgs = ["/d", "/s", "/c"];  // Added /d and /s flags for better parsing
           } else {
             shell = "/bin/bash";
             shellArgs = ["-c"];
           }
 
+          // Enhanced environment setup
+          const buildEnv = {
+            ...process.env,
+            PATH: process.env.PATH,
+            // Ensure proper npm environment
+            NODE_ENV: process.env.NODE_ENV || "production",
+            // Force color output for better error messages
+            FORCE_COLOR: "1",
+            npm_config_color: "always"
+          };
+
           const buildProcess = spawn(shell, [...shellArgs, buildCommand], {
             cwd: workspacePath,
-            env: {
-              ...process.env,
-              PATH: process.env.PATH,
-            },
+            env: buildEnv,
             stdio: ["pipe", "pipe", "pipe"],
+            windowsHide: true,
+            detached: false
           });
 
           let buildOutput = "";
@@ -363,13 +374,28 @@ async function runBuildProcess() {
 
           // Handle cancellation
           token.onCancellationRequested(() => {
-            buildProcess.kill();
+            try {
+              // Better process killing for Windows
+              if (isWindows) {
+                spawn("taskkill", ["/pid", buildProcess.pid?.toString() || "", "/t", "/f"]);
+              } else {
+                buildProcess.kill("SIGTERM");
+                // Fallback to SIGKILL if needed
+                setTimeout(() => {
+                  if (!buildProcess.killed) {
+                    buildProcess.kill("SIGKILL");
+                  }
+                }, 5000);
+              }
+            } catch (killError) {
+              console.error("Error killing build process:", killError);
+            }
             reject(new Error("Build cancelled by user"));
           });
 
-          // Collect stdout
+          // Collect stdout with better encoding
           buildProcess.stdout.on("data", (data: Buffer) => {
-            const text = data.toString();
+            const text = data.toString("utf8");
             buildOutput += text;
 
             // Update progress with current output line
@@ -386,9 +412,9 @@ async function runBuildProcess() {
             }
           });
 
-          // Collect stderr
+          // Collect stderr with better encoding
           buildProcess.stderr.on("data", (data: Buffer) => {
-            const text = data.toString();
+            const text = data.toString("utf8");
             errorOutput += text;
             buildOutput += text;
           });
@@ -406,73 +432,104 @@ async function runBuildProcess() {
                 );
                 resolve();
               } else {
-                // Build failed - log the error
-                const [branchName, developer, repoUrl] = await Promise.all([
-                  getGitBranch().catch(() => "unknown"),
-                  getDeveloperName().catch(() => "Unknown Developer"),
-                  getGitRemoteUrl(workspacePath).catch(() => "unknown"),
-                ]);
+                // Build failed - IMMEDIATELY show error notification FIRST
+                const errorMessage = `❌ Build failed with exit code ${code}! Duration: ${duration}ms`;
+                console.error("Build failed:", errorMessage);
+                
+                // Show error notification immediately - this is the most important part
+                vscode.window.showErrorMessage(
+                  errorMessage,
+                  "Show Error Details",
+                  "Open Dashboard"
+                ).then((selection) => {
+                  if (selection === "Show Error Details") {
+                    // Show error in a new document
+                    vscode.workspace
+                      .openTextDocument({
+                        content: `Build Error Details\n==================\n\nCommand: ${buildCommand}\nExit Code: ${code}\nDuration: ${duration}ms\nTimestamp: ${new Date().toISOString()}\n\nOutput:\n${buildOutput}`,
+                        language: "plaintext",
+                      })
+                      .then((doc) => {
+                        vscode.window.showTextDocument(doc);
+                      });
+                  } else if (selection === "Open Dashboard") {
+                    showBuildDashboard();
+                  }
+                });
 
-                const logEntry = {
-                  timestamp: new Date().toISOString(),
-                  error: truncateString(
-                    buildOutput.trim() || errorOutput.trim(),
-                    MAX_ERROR_LENGTH
-                  ),
-                  branch: branchName,
-                  developer: developer,
-                  exitCode: code,
-                  command: buildCommand,
-                  workingDirectory: workspacePath,
-                  buildTime: endTime,
-                  duration: duration,
-                  repoUrl: repoUrl,
-                };
+                // Handle logging in background - don't await or let it block
+                Promise.resolve().then(async () => {
+                  try {
+                    const [branchName, developer, repoUrl] = await Promise.all([
+                      getGitBranch().catch(() => "unknown"),
+                      getDeveloperName().catch(() => "Unknown Developer"),
+                      getGitRemoteUrl(workspacePath).catch(() => "unknown"),
+                    ]);
 
-                await saveLog(logEntry);
-                await uploadToFirebase(logEntry);
+                    const logEntry = {
+                      timestamp: new Date().toISOString(),
+                      error: truncateString(
+                        buildOutput.trim() || errorOutput.trim(),
+                        MAX_ERROR_LENGTH
+                      ),
+                      branch: branchName,
+                      developer: developer,
+                      exitCode: code,
+                      command: buildCommand,
+                      workingDirectory: workspacePath,
+                      buildTime: endTime,
+                      duration: duration,
+                      repoUrl: repoUrl,
+                    };
 
-                vscode.window
-                  .showErrorMessage(
-                    `❌ Build failed with exit code ${code}! Duration: ${duration}ms`,
-                    "Show Error Details",
-                    "Open Dashboard"
-                  )
-                  .then((selection) => {
-                    if (selection === "Show Error Details") {
-                      // Show error in a new document
-                      vscode.workspace
-                        .openTextDocument({
-                          content: `Build Error Details\n==================\n\nCommand: ${buildCommand}\nExit Code: ${code}\nDuration: ${duration}ms\nTimestamp: ${new Date().toISOString()}\n\nOutput:\n${buildOutput}`,
-                          language: "plaintext",
-                        })
-                        .then((doc) => {
-                          vscode.window.showTextDocument(doc);
-                        });
-                    } else if (selection === "Open Dashboard") {
-                      showBuildDashboard();
-                    }
-                  });
+                    // Save log and upload to Firebase
+                    await saveLog(logEntry);
+                    await uploadToFirebase(logEntry);
+                  } catch (loggingError) {
+                    console.error("Error logging build failure:", loggingError);
+                  }
+                });
 
-                resolve(); // Don't reject, we handled the error
+                // Add a small delay to ensure the error notification is shown before rejecting
+                setTimeout(() => {
+                  reject(new Error(errorMessage));
+                }, 100);
               }
             } catch (error) {
               console.error("Error handling build result:", error);
+              // Show error notification for any unexpected errors
+              vscode.window.showErrorMessage(`Build failed and error handling failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
               reject(error);
             }
           });
 
-          // Handle process errors
+          // Handle process errors with better error messages
           buildProcess.on("error", (err) => {
             console.error("Build process error:", err);
-            reject(err);
+            
+            // Provide specific error message for common issues
+            if (err.message.includes("ENOENT")) {
+              const errorMsg = `Command not found: ${buildCommand}. Make sure npm is installed and in your PATH.`;
+              vscode.window.showErrorMessage(errorMsg);
+              reject(new Error(errorMsg));
+            } else {
+              // FIXED: Show error notification for process errors
+              vscode.window.showErrorMessage(`Build process error: ${err.message}`);
+              reject(err);
+            }
           });
         });
       }
     );
   } catch (error) {
     console.error("Error in runBuildProcess:", error);
-    handleBuildError(error);
+    
+    // FIXED: Ensure error notification is always shown
+    const errorMessage = error instanceof Error ? error.message : "Build process failed with unknown error";
+    vscode.window.showErrorMessage(`Build failed: ${errorMessage}`);
+    
+    // Re-throw to allow caller to handle if needed
+    throw error;
   }
 }
 
