@@ -343,7 +343,7 @@ async function runBuildProcess() {
           // Fixed shell handling for better command parsing
           if (isWindows) {
             shell = process.env.ComSpec || "cmd.exe";
-            shellArgs = ["/d", "/s", "/c"];  // Added /d and /s flags for better parsing
+            shellArgs = ["/d", "/s", "/c"]; // Added /d and /s flags for better parsing
           } else {
             shell = "/bin/bash";
             shellArgs = ["-c"];
@@ -357,7 +357,7 @@ async function runBuildProcess() {
             NODE_ENV: process.env.NODE_ENV || "production",
             // Force color output for better error messages
             FORCE_COLOR: "1",
-            npm_config_color: "always"
+            npm_config_color: "always",
           };
 
           const buildProcess = spawn(shell, [...shellArgs, buildCommand], {
@@ -365,7 +365,7 @@ async function runBuildProcess() {
             env: buildEnv,
             stdio: ["pipe", "pipe", "pipe"],
             windowsHide: true,
-            detached: false
+            detached: false,
           });
 
           let buildOutput = "";
@@ -377,7 +377,12 @@ async function runBuildProcess() {
             try {
               // Better process killing for Windows
               if (isWindows) {
-                spawn("taskkill", ["/pid", buildProcess.pid?.toString() || "", "/t", "/f"]);
+                spawn("taskkill", [
+                  "/pid",
+                  buildProcess.pid?.toString() || "",
+                  "/t",
+                  "/f",
+                ]);
               } else {
                 buildProcess.kill("SIGTERM");
                 // Fallback to SIGKILL if needed
@@ -432,32 +437,30 @@ async function runBuildProcess() {
                 );
                 resolve();
               } else {
-                // Build failed - IMMEDIATELY show error notification FIRST
                 const errorMessage = `❌ Build failed with exit code ${code}! Duration: ${duration}ms`;
                 console.error("Build failed:", errorMessage);
-                
-                // Show error notification immediately - this is the most important part
-                vscode.window.showErrorMessage(
-                  errorMessage,
-                  "Show Error Details",
-                  "Open Dashboard"
-                ).then((selection) => {
-                  if (selection === "Show Error Details") {
-                    // Show error in a new document
-                    vscode.workspace
-                      .openTextDocument({
-                        content: `Build Error Details\n==================\n\nCommand: ${buildCommand}\nExit Code: ${code}\nDuration: ${duration}ms\nTimestamp: ${new Date().toISOString()}\n\nOutput:\n${buildOutput}`,
-                        language: "plaintext",
-                      })
-                      .then((doc) => {
-                        vscode.window.showTextDocument(doc);
-                      });
-                  } else if (selection === "Open Dashboard") {
-                    showBuildDashboard();
-                  }
-                });
 
-                // Handle logging in background - don't await or let it block
+                vscode.window
+                  .showErrorMessage(
+                    errorMessage,
+                    "Show Error Details",
+                    "Open Dashboard"
+                  )
+                  .then((selection) => {
+                    if (selection === "Show Error Details") {
+                      vscode.workspace
+                        .openTextDocument({
+                          content: `Build Error Details\n==================\n\nCommand: ${buildCommand}\nExit Code: ${code}\nDuration: ${duration}ms\nTimestamp: ${new Date().toISOString()}\n\nOutput:\n${buildOutput}`,
+                          language: "plaintext",
+                        })
+                        .then((doc) => {
+                          vscode.window.showTextDocument(doc);
+                        });
+                    } else if (selection === "Open Dashboard") {
+                      showBuildDashboard();
+                    }
+                  });
+
                 Promise.resolve().then(async () => {
                   try {
                     const [branchName, developer, repoUrl] = await Promise.all([
@@ -482,7 +485,6 @@ async function runBuildProcess() {
                       repoUrl: repoUrl,
                     };
 
-                    // Save log and upload to Firebase
                     await saveLog(logEntry);
                     await uploadToFirebase(logEntry);
                   } catch (loggingError) {
@@ -490,31 +492,33 @@ async function runBuildProcess() {
                   }
                 });
 
-                // Add a small delay to ensure the error notification is shown before rejecting
                 setTimeout(() => {
                   reject(new Error(errorMessage));
                 }, 100);
               }
             } catch (error) {
               console.error("Error handling build result:", error);
-              // Show error notification for any unexpected errors
-              vscode.window.showErrorMessage(`Build failed and error handling failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+
+              vscode.window.showErrorMessage(
+                `Build failed and error handling failed: ${
+                  error instanceof Error ? error.message : "Unknown error"
+                }`
+              );
               reject(error);
             }
           });
 
-          // Handle process errors with better error messages
           buildProcess.on("error", (err) => {
             console.error("Build process error:", err);
-            
-            // Provide specific error message for common issues
+
             if (err.message.includes("ENOENT")) {
               const errorMsg = `Command not found: ${buildCommand}. Make sure npm is installed and in your PATH.`;
               vscode.window.showErrorMessage(errorMsg);
               reject(new Error(errorMsg));
             } else {
-              // FIXED: Show error notification for process errors
-              vscode.window.showErrorMessage(`Build process error: ${err.message}`);
+              vscode.window.showErrorMessage(
+                `Build process error: ${err.message}`
+              );
               reject(err);
             }
           });
@@ -523,11 +527,14 @@ async function runBuildProcess() {
     );
   } catch (error) {
     console.error("Error in runBuildProcess:", error);
-    
+
     // FIXED: Ensure error notification is always shown
-    const errorMessage = error instanceof Error ? error.message : "Build process failed with unknown error";
+    const errorMessage =
+      error instanceof Error
+        ? error.message
+        : "Build process failed with unknown error";
     vscode.window.showErrorMessage(`Build failed: ${errorMessage}`);
-    
+
     // Re-throw to allow caller to handle if needed
     throw error;
   }
@@ -613,7 +620,6 @@ function getValidatedBuildCommand(): string {
   const config = vscode.workspace.getConfiguration("build-logger");
   let buildCommand = config.get<string>("buildCommand") || "";
 
-  // If no custom command is set, auto-detect based on project files
   if (!buildCommand.trim()) {
     const packageJsonPath = path.join(workspacePath, "package.json");
 
@@ -624,7 +630,6 @@ function getValidatedBuildCommand(): string {
         );
         const scripts = packageJson.scripts || {};
 
-        // Check for common build scripts in order of preference
         if (scripts.build) {
           buildCommand = "npm run build";
         } else if (scripts.compile) {
@@ -634,14 +639,13 @@ function getValidatedBuildCommand(): string {
         } else if (scripts.dev) {
           buildCommand = "npm run dev";
         } else {
-          buildCommand = "npm install"; // Fallback to install
+          buildCommand = "npm install";
         }
       } catch (error) {
         console.warn("Could not parse package.json:", error);
         buildCommand = "npm install";
       }
     } else {
-      // Check for other project types
       if (fs.existsSync(path.join(workspacePath, "pom.xml"))) {
         buildCommand = "mvn compile";
       } else if (fs.existsSync(path.join(workspacePath, "build.gradle"))) {
@@ -656,7 +660,6 @@ function getValidatedBuildCommand(): string {
     }
   }
 
-  // Validate the command exists in package.json if it's an npm script
   if (
     buildCommand.includes("npm run") ||
     buildCommand.includes("yarn") ||
@@ -717,13 +720,11 @@ async function getGitBranch(): Promise<string> {
 
 async function getDeveloperName(): Promise<string> {
   try {
-    // Try to get user from git config first
     const gitName = await executeCommand("git config user.name");
     if (gitName.trim()) {
       return gitName.trim();
     }
 
-    // Fallback to environment variables
     const username =
       process.env.USER ||
       process.env.USERNAME ||
@@ -780,7 +781,7 @@ async function saveLog(logEntry: any) {
     const enhancedEntry = {
       ...logEntry,
       extensionVersion:
-        vscode.extensions.getExtension("KeshavKumar.build-logger")?.packageJSON
+        vscode.extensions.getExtension("InternNetExplorers.build-logger")?.packageJSON
           .version || "unknown",
       vscodeVersion: vscode.version,
       platform: process.platform,
@@ -920,18 +921,22 @@ function generateDashboardHtml(logs: any[]): string {
         errorSig.length > 200 ? errorSig.substring(0, 200) + "..." : errorSig
       );
       return `
-            <li style="display: flex; justify-content: space-between; align-items: center;">
-                <details style="flex-grow: 1; margin-right: 10px;">
-                    <summary><strong>${count}x</strong> ${shortError}</summary>
-                    <pre class="error-details">${escapeHtml(fullError)}</pre>
-                </details>
-                <button class="ai-analyze-btn" data-error="${escapeHtml(
-                  encodeURIComponent(fullError)
-                )}">
-                   🧠 Analyze with AI
-                </button>
-            </li>
-            `;
+           <li style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap;">
+              <details style="flex-grow: 1; margin-right: 10px; min-width: 0;">
+              <summary><strong>${count}x</strong> ${shortError}</summary>
+              <pre class="error-details" style="white-space: pre-wrap; word-break: break-word;">${escapeHtml(
+                fullError
+              )}
+              </pre>
+              </details>
+              <button 
+              class="ai-analyze-btn" 
+              data-error="${escapeHtml(encodeURIComponent(fullError))}"
+              style="flex-shrink: 0; max-width: 100%; word-break: break-word; padding: 6px 10px; font-size: 14px; border-radius: 4px; background-color: #007acc; color: white; border: none; cursor: pointer;"
+            >
+              🧠 Analyze with AI
+            </button>
+            </li>`;
     })
     .join("");
 
