@@ -27,7 +27,7 @@ A Visual Studio Code extension that tracks build failures, collects contextual i
 2. Copy and run the following commands in your terminal:
    ```bash
    vsce package
-   code --install-extension build-logger-0.0.2.vsix
+   code --install-extension build-logger-1.0.0.vsix
    ```
 3. Reload VS Code when prompted
 
