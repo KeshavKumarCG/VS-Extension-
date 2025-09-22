@@ -4,6 +4,7 @@ A Visual Studio Code extension that tracks build failures, collects contextual i
 
 
 
+
 ## Features 🚀
 
 - **Build Failure Tracking**: Automatically logs failed builds with context
